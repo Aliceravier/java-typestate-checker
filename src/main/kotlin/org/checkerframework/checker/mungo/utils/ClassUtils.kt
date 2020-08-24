@@ -54,8 +54,8 @@ class ClassUtils(private val utils: MungoUtils) {
   }
 
   fun visitClassOfElement(element: Element): Graph? {
-    val type = utils.factory.fromElement(element) as? AnnotatedTypeMirror.AnnotatedDeclaredType ?: return null
-    return visitClassTypeMirror(type.underlyingType)
+    // val type = utils.factory.fromElement(element) as? AnnotatedTypeMirror.AnnotatedDeclaredType ?: return null
+    return visitClassTypeMirror(element.asType())
   }
 
   fun visitClassTypeMirror(type: TypeMirror): Graph? {

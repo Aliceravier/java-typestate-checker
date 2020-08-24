@@ -1,5 +1,6 @@
 package org.checkerframework.checker.mungo.utils
 
+import com.sun.source.tree.CompilationUnitTree
 import com.sun.source.tree.IdentifierTree
 import com.sun.source.tree.Tree
 import com.sun.source.util.TreePath
@@ -8,20 +9,24 @@ import com.sun.tools.javac.code.Symtab
 import com.sun.tools.javac.code.Type
 import com.sun.tools.javac.file.JavacFileManager
 import com.sun.tools.javac.processing.JavacProcessingEnvironment
+import com.sun.tools.javac.util.JCDiagnostic
 import com.sun.tools.javac.util.Log
-import org.checkerframework.checker.mungo.MungoChecker
 import org.checkerframework.checker.mungo.annotators.MungoAnnotatedTypeFactory
+import org.checkerframework.checker.mungo.core.StubFilesProcessor
 import org.checkerframework.checker.mungo.lib.*
-import org.checkerframework.checker.mungo.qualifiers.*
+import org.checkerframework.checker.mungo.qualifiers.MungoBottom
+import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo
+import org.checkerframework.checker.mungo.qualifiers.MungoUnknown
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoType
 import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
 import org.checkerframework.checker.mungo.typecheck.getTypeFromAnnotation
 import org.checkerframework.checker.mungo.typestate.TypestateProcessor
 import org.checkerframework.checker.mungo.typestate.graph.Graph
-import org.checkerframework.javacutil.AnnotationUtils
-import org.checkerframework.javacutil.TreeUtils
-import org.checkerframework.javacutil.TypesUtils
+import org.checkerframework.framework.source.SourceChecker
+import org.checkerframework.framework.stub.StubTypes
+import org.checkerframework.framework.type.AnnotatedTypeFactory
+import org.checkerframework.javacutil.*
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.*
@@ -30,7 +35,7 @@ import javax.lang.model.element.Element
 import javax.lang.model.type.TypeMirror
 import javax.tools.JavaFileManager
 
-class MungoUtils(val checker: MungoChecker) {
+class MungoUtils(val checker: SourceChecker) {
 
   class LazyField<T>(private val fn: () -> T) {
     private var value: T? = null
@@ -41,7 +46,8 @@ class MungoUtils(val checker: MungoChecker) {
     }
   }
 
-  val ctx = (checker.processingEnvironment as JavacProcessingEnvironment).context
+  val env = (checker.processingEnvironment as JavacProcessingEnvironment)
+  val ctx = env.context
   val symtab = Symtab.instance(ctx)
   val log = Log.instance(ctx)
   val fileManager = ctx.get(JavaFileManager::class.java) as JavacFileManager
@@ -51,16 +57,45 @@ class MungoUtils(val checker: MungoChecker) {
 
   val resolver = Resolver(checker)
   val classUtils = ClassUtils(this)
-  val configUtils = ConfigUtils(checker.getConfigFile())
+  val configUtils = ConfigUtils(checker)
 
   val processor = TypestateProcessor(this)
   val methodUtils = MethodUtils(this)
+
+  val stubFilesProcessor = StubFilesProcessor(checker)
 
   private var _factory: MungoAnnotatedTypeFactory? = null
   val factory get() = _factory ?: throw AssertionError("no factory")
 
   fun setFactory(f: MungoAnnotatedTypeFactory) {
     _factory = f
+  }
+
+  // Adapted from SourceChecker#report and JavacTrees#printMessage
+  private fun reportError(file: Path, pos: Int, messageKey: String, vararg args: Any?) {
+    val defaultFormat = "($messageKey)"
+    val fmtString = if (env.options != null && env.options.containsKey("nomsgtext")) {
+      defaultFormat
+    } else if (env.options != null && env.options.containsKey("detailedmsgtext")) {
+      // TODO detailedMsgTextPrefix(source, defaultFormat, args) + fullMessageOf(messageKey, defaultFormat)
+      defaultFormat
+    } else {
+      // TODO "[" + suppressionKey(messageKey) + "] " + fullMessageOf(messageKey, defaultFormat)
+      defaultFormat
+    }
+    val messageText = try {
+      String.format(fmtString, *args)
+    } catch (e: Exception) {
+      throw BugInCF("Invalid format string: \"$fmtString\" args: " + args.contentToString(), e)
+    }
+
+    val newSource = fileManager.getJavaFileObject(getUserPath(file))
+    val oldSource = log.useSource(newSource)
+    try {
+      log.error(JCDiagnostic.DiagnosticFlag.MULTIPLE, JCDiagnostic.SimpleDiagnosticPosition(pos), "proc.messager", messageText)
+    } finally {
+      log.useSource(oldSource)
+    }
   }
 
   fun err(message: String, where: Tree) {
@@ -72,7 +107,7 @@ class MungoUtils(val checker: MungoChecker) {
   }
 
   fun err(message: String, file: Path, pos: Int) {
-    checker.reportError(file, pos, message)
+    reportError(file, pos, message)
   }
 
   fun checkStates(graph: Graph, states: List<String>?): List<String> {
@@ -112,6 +147,8 @@ class MungoUtils(val checker: MungoChecker) {
 
   fun getPath(tree: Tree): TreePath? = treeUtils.getPath(factory.getCurrentRoot(), tree)
 
+  fun getPath(tree: Tree, root: CompilationUnitTree): TreePath? = treeUtils.getPath(root, tree)
+
   fun wasMovedToDiffClosure(path: TreePath, tree: IdentifierTree, element: Symbol.VarSymbol): Boolean {
     // See if it has protocol
     classUtils.visitClassOfElement(element) ?: return false
@@ -123,7 +160,7 @@ class MungoUtils(val checker: MungoChecker) {
     }
 
     // Find declaration and enclosing method/lambda
-    val declarationTree = factory.declarationFromElement(element) ?: return false
+    val declarationTree = treeUtils.getTree(element) ?: return false
     val declaration = treeUtils.getPath(path.compilationUnit, declarationTree) ?: return false
     val enclosingMethodOrLambda = enclosingMethodOrLambda(path) ?: return false
 

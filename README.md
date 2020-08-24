@@ -1,4 +1,6 @@
-# Mungo plugin for Checker Framework
+# Java Typestate Checker plugin for Checker Framework
+
+*Work in progress...*
 
 ## How it works
 
