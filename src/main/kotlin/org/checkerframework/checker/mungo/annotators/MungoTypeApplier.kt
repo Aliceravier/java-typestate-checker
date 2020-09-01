@@ -1,7 +1,7 @@
 package org.checkerframework.checker.mungo.annotators
 
 import com.sun.source.tree.Tree
-import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.old.MungoChecker
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
 import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.framework.type.AnnotatedTypeMirror

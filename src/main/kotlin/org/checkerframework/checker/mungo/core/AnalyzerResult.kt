@@ -14,6 +14,13 @@ class AnalyzerResult(_thenStore: Store, _elseStore: Store) {
     return Store.empty // TODO
   }
 
+  override fun toString(): String {
+    if (isRegular()) {
+      return "Result{store=$thenStore}"
+    }
+    return "Result{\nthen=$thenStore,\nelse=$elseStore\n}"
+  }
+
 }
 
 open class MutableAnalyzerResult(var thenStore: MutableStore, var elseStore: MutableStore) {
@@ -44,10 +51,24 @@ open class MutableAnalyzerResult(var thenStore: MutableStore, var elseStore: Mut
     return Store.empty // TODO
   }
 
+  override fun toString(): String {
+    if (isRegular()) {
+      return "Result{store=$thenStore}"
+    }
+    return "Result{\nthen=$thenStore,\nelse=$elseStore\n}"
+  }
+
 }
 
 class MutableAnalyzerResultWithValue(var value: StoreInfo, thenStore: MutableStore, elseStore: MutableStore) : MutableAnalyzerResult(thenStore, elseStore) {
 
   constructor(value: StoreInfo, result: AnalyzerResult) : this(value, result.thenStore.toMutable(), result.elseStore.toMutable())
+
+  override fun toString(): String {
+    if (isRegular()) {
+      return "Result{value=$value, store=$thenStore}"
+    }
+    return "Result{value=$value,\nthen=$thenStore,\nelse=$elseStore\n}"
+  }
 
 }

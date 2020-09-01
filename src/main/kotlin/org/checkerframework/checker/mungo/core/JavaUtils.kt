@@ -1,6 +1,6 @@
 package org.checkerframework.checker.mungo.core
 
-import com.sun.source.tree.ExpressionTree
+import com.sun.source.tree.*
 import com.sun.tools.javac.code.Type
 import org.checkerframework.javacutil.TreeUtils
 import java.util.*
@@ -9,6 +9,14 @@ import javax.lang.model.type.TypeKind
 import javax.lang.model.type.TypeMirror
 import javax.lang.model.type.TypeVariable
 import javax.lang.model.type.WildcardType
+
+fun treeToType(tree: Tree) = when(tree) {
+  is ClassTree -> TreeUtils.elementFromDeclaration(tree).asType()
+  is MethodTree -> TreeUtils.elementFromDeclaration(tree).asType()
+  is VariableTree -> TreeUtils.elementFromDeclaration(tree).asType()
+  is ExpressionTree -> TreeUtils.typeOf(TreeUtils.withoutParens(tree))
+  else -> throw RuntimeException("unknown kind ${tree.kind}")
+}
 
 // Adapted from AnnotatedTypes.getArrayDepth
 fun getArrayDepth(array: TypeMirror): Int {
@@ -24,7 +32,7 @@ fun getArrayDepth(array: TypeMirror): Int {
 fun isLastArgumentArrayMatchingVararg(varargs: Type.ArrayType, parameters: List<TypeMirror>, args: List<ExpressionTree>): Boolean {
   if (parameters.size == args.size) {
     // Check if one sent an element or an array
-    val lastArg = TreeUtils.elementFromTree(args.last())!!.asType()
+    val lastArg = treeToType(args.last())
     if (
       lastArg.kind == TypeKind.ARRAY &&
       getArrayDepth(varargs) == getArrayDepth(lastArg)

@@ -1,5 +1,6 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo
 
+import org.checkerframework.checker.mungo.core.Typechecker
 import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.framework.source.SourceChecker
 import org.checkerframework.framework.source.SourceVisitor
@@ -9,8 +10,7 @@ const val configFile = "configFile"
 
 class MainChecker : SourceChecker() {
 
-  private val _utils = MungoUtils.LazyField { MungoUtils(this) }
-  val utils get() = _utils.get()
+  lateinit var utils: MungoUtils
 
   override fun getSupportedOptions() = super.getSupportedOptions().plus(showTypeInfoOpt).plus(configFile)
 
@@ -18,6 +18,13 @@ class MainChecker : SourceChecker() {
 
   override fun createSourceVisitor(): SourceVisitor<*, *> {
     return Typechecker(this)
+  }
+
+  override fun initChecker() {
+    super.initChecker()
+    val utils = MungoUtils(this)
+    utils.stubFilesProcessor.init()
+    this.utils = utils
   }
 
 }

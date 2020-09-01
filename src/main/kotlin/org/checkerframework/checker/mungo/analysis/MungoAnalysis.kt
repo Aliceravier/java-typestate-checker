@@ -1,6 +1,6 @@
 package org.checkerframework.checker.mungo.analysis
 
-import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.old.MungoChecker
 import org.checkerframework.checker.mungo.annotators.MungoAnnotatedTypeFactory
 import org.checkerframework.dataflow.analysis.AnalysisResult
 import org.checkerframework.dataflow.analysis.Store

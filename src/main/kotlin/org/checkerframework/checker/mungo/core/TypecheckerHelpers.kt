@@ -1,9 +1,11 @@
 package org.checkerframework.checker.mungo.core
 
 import com.sun.source.tree.*
+import com.sun.source.util.TreePath
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Type
 import com.sun.tools.javac.tree.JCTree
+import org.checkerframework.checker.mungo.MainChecker
 import org.checkerframework.checker.mungo.typecheck.*
 import org.checkerframework.checker.mungo.utils.ClassUtils
 import org.checkerframework.checker.mungo.utils.MungoUtils
@@ -22,7 +24,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
 
   protected fun checkReturnTypeAnnotation(node: AnnotationTree, annoMirror: AnnotationMirror, parent: Tree) {
     if (parent is MethodTree && parent.modifiers.annotations.contains(node)) {
-      val typeMirror = TreeUtils.elementFromTree(parent.returnType)?.asType()
+      val typeMirror = treeToType(parent.returnType)
       if (typeMirror != null) {
         if (ClassUtils.isJavaLangObject(typeMirror)) {
           utils.err("@MungoState has no meaning in Object type", node)
@@ -43,7 +45,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
 
   protected fun checkParameterAnnotation(node: AnnotationTree, annoMirror: AnnotationMirror, parent: Tree, parentParent: Tree, name: String) {
     if (parent is VariableTree && parentParent is MethodTree && parentParent.parameters.contains(parent)) {
-      val typeMirror = TreeUtils.elementFromTree(parent)?.asType()
+      val typeMirror = treeToType(parent)
       if (typeMirror != null) {
         if (ClassUtils.isJavaLangObject(typeMirror)) {
           utils.err("@$name has no meaning in Object type", node)
@@ -113,7 +115,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
 
   private fun getParamTypesAfterCall(parameters: List<VariableTree>): Map<String, MungoType?> {
     return parameters.map {
-      val typeMirror = TreeUtils.elementFromTree(it)!!.asType()
+      val typeMirror = treeToType(it)
       val type = MungoTypecheck.typeAfterMethodCall(utils, typeMirror)
       Pair(it.name.toString(), type)
     }.toMap()
@@ -166,19 +168,19 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
     // TODO
   }
 
-  protected fun commonAssignmentCheck(left: Tree, right: ExpressionTree, errorKey: String) {
-    commonAssignmentCheck(TreeUtils.elementFromTree(left)!!.asType(), right, errorKey)
+  protected fun commonAssignmentCheck(left: Tree, right: Tree, errorKey: String) {
+    commonAssignmentCheck(treeToType(left), left, treeToType(right), right, errorKey)
 
     when (left) {
       is VariableTree -> {
         // In case we are in a loop, ensure the object from the previous loop has completed its protocol
         val receiver = getReference(left) ?: return
-        val leftValue = analyzer.getStoreBefore(left)[receiver] ?: return
+        val leftValue = analyzer.getStoreBefore(left)[receiver] ?: analyzer.getInitialInfo(left)
         checkFinalType(receiver.toString(), leftValue, left)
       }
       is ExpressionTree -> {
         val receiver = getReference(left) ?: return
-        val leftValue = analyzer.getStoreBefore(left)[receiver] ?: return
+        val leftValue = analyzer.getStoreBefore(left)[receiver] ?: analyzer.getInitialInfo(left)
         checkFinalType(receiver.toString(), leftValue, left)
 
         if (left is JCTree.JCFieldAccess) {
@@ -193,23 +195,22 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
     }
   }
 
-  protected fun commonAssignmentCheck(varType: TypeMirror, valueExp: ExpressionTree, errorKey: String) {
-    if (valueExp.kind == Tree.Kind.MEMBER_REFERENCE || valueExp.kind == Tree.Kind.LAMBDA_EXPRESSION) {
-      // Member references and lambda expressions are type checked separately
-      // and do not need to be checked again as arguments.
-      return
-    }
-    if (varType is Type.ArrayType && valueExp is NewArrayTree && valueExp.type == null) {
-      // TODO checkArrayInitialization(varType.componentType, valueExp.initializers)
-    }
-    val valueType = TreeUtils.elementFromTree(valueExp)!!.asType()
-    commonAssignmentCheck(varType, valueType, valueExp, errorKey)
+  protected fun commonAssignmentCheckParameter(varType: TypeMirror, valueExp: Tree, errorKey: String) {
+    commonAssignmentCheck(varType, null, treeToType(valueExp), valueExp, errorKey, true)
+  }
+
+  protected fun commonAssignmentCheckReturn(varType: TypeMirror, valueExp: Tree) {
+    commonAssignmentCheck(varType, null, treeToType(valueExp), valueExp, "return.type.incompatible", true)
   }
 
   private fun isPrimitiveAndBoxedPrimitive(aType: MungoType, bType: MungoType, bMirror: TypeMirror) =
     aType.isSubtype(MungoPrimitiveType.SINGLETON) && bType.isSubtype(MungoNoProtocolType.SINGLETON) && TypesUtils.isBoxedPrimitive(bMirror)
 
-  protected fun commonAssignmentCheck(varType: TypeMirror, valueType: TypeMirror, valueTree: Tree, errorKey: String) {
+  protected fun commonAssignmentCheck(varType: TypeMirror, varTree: Tree?, valueType: TypeMirror, valueTree: Tree, errorKey: String, refine: Boolean = false) {
+    if (varType is Type.ArrayType && valueTree is NewArrayTree && valueTree.type == null) {
+      // TODO checkArrayInitialization(varType.componentType, valueTree.initializers)
+    }
+
     // Detect possible leaked "this"
     if (valueTree is ExpressionTree && TreeUtils.isExplicitThisDereference(valueTree)) {
       val element = TreeUtils.elementFromTree(valueTree)
@@ -229,17 +230,15 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
       }
     }
 
-    val varMungoType = analyzer.getType(varType)
+    val varInfo = if (varTree == null) analyzer.getInitialInfo(varType, refine) else analyzer.getInitialInfo(varTree)
+    val varMungoType = varInfo.mungoType
     val valMungoType = analyzer.getInferredType(valueTree)
 
     // Assignments from boxed primitives to primitives and vice-versa should be allowed
     if (isPrimitiveAndBoxedPrimitive(varMungoType, valMungoType, valueType)) return
     if (isPrimitiveAndBoxedPrimitive(valMungoType, varMungoType, varType)) return
 
-    val success = valMungoType.isSubtype(varMungoType)
-
-    // Use an error key only if it's overridden by a checker.
-    if (!success) {
+    if (!valMungoType.isSubtype(varMungoType)) {
       val pair = FoundRequired.of(valueType, varType)
       val valueTypeString = pair.found
       val varTypeString = pair.required
@@ -247,9 +246,14 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
     }
   }
 
-  protected fun printTypeInfo(node: IdentifierTree) {
+  protected fun printTypeInfo(path: TreePath, node: IdentifierTree) {
     if (checker.shouldReportTypeInfo() && !node.name.contentEquals("this")) {
-      val type = analyzer.getInferredType(node)
+      val parent = path.parentPath.leaf
+      val type = if (parent is VariableTree || parent is AssignmentTree && parent.variable === node) {
+        (analyzer.getStoreBefore(node)[getReference(node)!!] ?: analyzer.getInitialInfo(node)).mungoType
+      } else {
+        analyzer.getInferredType(node)
+      }
       if (type !is MungoNoProtocolType && type !is MungoPrimitiveType) {
         checker.reportWarning(node, "$node: ${type.format()}")
       }

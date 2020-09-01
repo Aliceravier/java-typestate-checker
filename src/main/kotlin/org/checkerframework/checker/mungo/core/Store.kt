@@ -1,30 +1,59 @@
 package org.checkerframework.checker.mungo.core
 
 import com.sun.tools.javac.code.Type
-import org.checkerframework.checker.mungo.analysis.MungoValue
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoType
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
 import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
 import org.checkerframework.checker.mungo.utils.MungoUtils
+import org.checkerframework.javacutil.TypesUtils
 import javax.lang.model.element.Modifier
+import javax.lang.model.element.TypeElement
 import javax.lang.model.type.TypeMirror
+import javax.lang.model.util.Types
 
-class StoreInfo(val mungoType: MungoType, val type: TypeMirror) {
+class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: TypeMirror) {
 
-  constructor(prevInfo: StoreInfo, info: MungoType) : this(info, prevInfo.type)
+  constructor(prevInfo: StoreInfo, newType: MungoType) : this(prevInfo.analyzer, newType, prevInfo.type)
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other !is StoreInfo) return false
+    if (mungoType != other.mungoType) return false
+    return (type === other.type || analyzer.utils.typeUtils.isSameType(type, other.type))
+  }
+
+  override fun hashCode(): Int {
+    return mungoType.hashCode()
+  }
+
+  override fun toString(): String {
+    return "StoreInfo{$mungoType, $type}"
+  }
 
   companion object {
-    val unknown = StoreInfo(MungoUnknownType.SINGLETON, Type.UnknownType())
-
-    val bottom = StoreInfo(MungoBottomType.SINGLETON, Type.noType)
-
     fun merge(a: StoreInfo, b: StoreInfo): StoreInfo {
-      return StoreInfo(a.mungoType.leastUpperBound(b.mungoType), a.type)
+      return StoreInfo(
+        a.analyzer,
+        a.mungoType.leastUpperBound(b.mungoType),
+        TypesUtils.leastUpperBound(a.type, b.type, a.analyzer.utils.env)
+      )
     }
 
     fun intersect(a: StoreInfo, b: StoreInfo): StoreInfo {
-      return StoreInfo(a.mungoType.intersect(b.mungoType), a.type)
+      val types = a.analyzer.utils.typeUtils
+      val mostSpecific = if (types.isAssignable(a.type, b.type)) {
+        a.type
+      } else if (types.isAssignable(b.type, a.type)) {
+        b.type
+      } else if (TypesUtils.isErasedSubtype(a.type, b.type, types)) {
+        a.type
+      } else if (TypesUtils.isErasedSubtype(b.type, a.type, types)) {
+        b.type
+      } else {
+        a.type
+      }
+      return StoreInfo(a.analyzer, a.mungoType.intersect(b.mungoType), mostSpecific)
     }
   }
 }
@@ -44,6 +73,10 @@ sealed class Store(private val map: Map<Reference, StoreInfo>) {
     return map.hashCode()
   }
 
+  override fun toString(): String {
+    return map.toString()
+  }
+
   fun toMutable(): MutableStore {
     return MutableStore(map.toMutableMap())
   }
@@ -56,7 +89,8 @@ sealed class Store(private val map: Map<Reference, StoreInfo>) {
     val empty = MutableStore().toImmutable()
 
     fun merge(a: Store, b: Store): Store {
-      return if (a === b) a else a.toMutable().merge(b).toImmutable()
+      if (a === b) return a
+      return a.toMutable().merge(b).toImmutable()
     }
 
     fun mutableMergeFields(a: Store, b: Store): MutableStore {
@@ -125,25 +159,28 @@ class MutableStore(private val map: MutableMap<Reference, StoreInfo> = mutableMa
   }
 
   fun invalidate(utils: MungoUtils): MutableStore {
+    canMutate()
     for ((key, value) in map) {
-      map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, value.type))
+      map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, key.type))
     }
     return this
   }
 
   fun invalidateFields(utils: MungoUtils): MutableStore {
+    canMutate()
     for ((key, value) in map) {
       if (key.isThisField()) {
-        map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, value.type))
+        map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, key.type))
       }
     }
     return this
   }
 
   fun invalidatePublicFields(utils: MungoUtils): MutableStore {
+    canMutate()
     for ((key, value) in map) {
-      if (key.isThisField() && key is FieldAccess && key.field.modifiers.contains(Modifier.PRIVATE)) {
-        map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, value.type))
+      if (key.isThisField() && key is FieldAccess && key.isNonPrivate) {
+        map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, key.type))
       }
     }
     return this

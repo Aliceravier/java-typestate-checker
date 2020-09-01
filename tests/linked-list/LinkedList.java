@@ -30,13 +30,12 @@ public class LinkedList {
     Node n = new Node(value);
     // :: warning: (tail: Null | NoProtocol)
     if (tail == null) {
-      // :: warning: (head: NoProtocol | Null)
+      // :: warning: (head: Null | NoProtocol)
       head = n;
-      // :: warning: (tail: NoProtocol | Null)
+      // :: warning: (tail: Null)
       tail = n;
     } else {
       tail.next = n;
-      // :: warning: (tail: NoProtocol | Null)
       tail = n;
     }
   }
@@ -45,7 +44,6 @@ public class LinkedList {
     @MungoNullable Node node = this.head;
     // :: warning: (node: NoProtocol | Null)
     for (int i = 0; node != null && i < idx; i++) {
-      // :: warning: (node: NoProtocol | Null)
       node = node.next;
     }
     // type of expression: Item{State0|State1} | Null | Ended | Moved

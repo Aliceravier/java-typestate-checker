@@ -3,6 +3,7 @@ package org.checkerframework.checker.mungo.core
 import com.sun.source.tree.*
 import com.sun.source.util.TreePath
 import com.sun.tools.javac.code.Symbol
+import org.checkerframework.checker.mungo.MainChecker
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoMovedType
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
@@ -12,6 +13,7 @@ import org.checkerframework.dataflow.cfg.ControlFlowGraph
 import org.checkerframework.dataflow.cfg.UnderlyingAST
 import org.checkerframework.dataflow.cfg.node.*
 import org.checkerframework.javacutil.TreeUtils
+import javax.lang.model.element.ElementKind
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.type.TypeMirror
 
@@ -43,7 +45,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
     parameters?.forEach {
       val internal = getReference(it)!!
       val mungoType = MungoTypecheck.typeDeclaration(utils, it.type)
-      store[internal] = StoreInfo(mungoType, it.type)
+      store[internal] = StoreInfo(analyzer, mungoType, it.type)
     }
 
     return store.toImmutable()
@@ -112,6 +114,12 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   override fun visitConditionalNot(n: ConditionalNotNode, res: MutableAnalyzerResultWithValue): Void? {
+    // Reverse
+    val currThen = res.thenStore
+    val currElse = res.elseStore
+    res.thenStore = currElse
+    res.elseStore = currThen
+    // Refine
     refineCondition(n, res)
     return null
   }
@@ -239,7 +247,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   override fun visitLambdaResultExpression(n: LambdaResultExpressionNode, input: MutableAnalyzerResultWithValue): Void? {
-    // n.result!!.accept(this, input)
+    // TODO n.result!!.accept(this, input) ??
     return null
   }
 
@@ -257,14 +265,29 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
     return null
   }
 
-  override fun visitMethodInvocation(n: MethodInvocationNode, result: MutableAnalyzerResultWithValue): Void? {
-    // Invalidate
-    // TODO improve
-    result.thenStore.invalidate(utils)
-    result.elseStore.invalidate(utils)
+  private fun isSideEffectFree(method: ExecutableElement): Boolean {
+    if (method.kind == ElementKind.CONSTRUCTOR && method.simpleName.toString() == "<init>") {
+      // java.lang.Object constructor is side effect free
+      return true
+    }
+    // TODO PurityUtils.isSideEffectFree(atypeFactory, method)
+    // TODO TypesUtils.isImmutableTypeInJdk
+    return false
+  }
 
+  override fun visitMethodInvocation(n: MethodInvocationNode, result: MutableAnalyzerResultWithValue): Void? {
     val method = n.target.method as Symbol.MethodSymbol
     val args = n.arguments
+
+    // Invalidate
+    // TODO improve?
+    if (!isSideEffectFree(method)) {
+      // result.thenStore.invalidate(utils)
+      // result.elseStore.invalidate(utils)
+      // TODO invalidate all fields? not just from "this"?
+      result.thenStore.invalidateFields(utils)
+      result.elseStore.invalidateFields(utils)
+    }
 
     // Apply type refinements
 

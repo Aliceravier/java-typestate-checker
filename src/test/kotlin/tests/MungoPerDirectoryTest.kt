@@ -1,6 +1,6 @@
 package tests
 
-import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.MainChecker
 import org.checkerframework.framework.test.CheckerFrameworkPerDirectoryTest
 import org.checkerframework.framework.test.TestConfigurationBuilder
 import org.checkerframework.framework.test.TestUtilities
@@ -8,19 +8,25 @@ import org.junit.Test
 import java.io.File
 import java.util.*
 
-abstract class MungoPerDirectoryTest(testDir: String, testFiles: List<File>, opts: Array<String>) : CheckerFrameworkPerDirectoryTest(
+val ignore = emptyArray<String>()
+
+abstract class MungoPerDirectoryTest(val originalTestDir: String, testFiles: List<File>, opts: Array<String>) : CheckerFrameworkPerDirectoryTest(
   testFiles,
-  MungoChecker::class.java,
-  testDir,
+  MainChecker::class.java,
+  originalTestDir,
   *opts
 ) {
   @Test
   override fun run() {
+    if (ignore.contains(originalTestDir)) {
+      return
+    }
     val shouldEmitDebugInfo = TestUtilities.getShouldEmitDebugInfo()
     val customizedOptions = customizeOptions(Collections.unmodifiableList(checkerOptions))
     val config = TestConfigurationBuilder.buildDefaultConfiguration(
       testDir,
-      testFiles, setOf(checkerName),
+      testFiles,
+      setOf(checkerName),
       customizedOptions,
       shouldEmitDebugInfo)
     val testResult = MungoTypecheckExecutor(testDir).runTest(config)

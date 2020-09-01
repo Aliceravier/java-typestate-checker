@@ -1,4 +1,4 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.old
 
 sealed class OldReference {
   abstract fun isThisField(): Boolean

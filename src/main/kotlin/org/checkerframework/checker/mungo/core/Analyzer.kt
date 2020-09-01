@@ -1,44 +1,51 @@
 package org.checkerframework.checker.mungo.core
 
-import com.sun.source.tree.ClassTree
-import com.sun.source.tree.CompilationUnitTree
-import com.sun.source.tree.MethodTree
-import com.sun.source.tree.Tree
+import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol
+import com.sun.tools.javac.code.Type
 import com.sun.tools.javac.tree.JCTree
-import org.checkerframework.checker.mungo.typecheck.MungoType
-import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
+import com.sun.tools.javac.tree.TreeInfo
+import org.checkerframework.checker.mungo.MainChecker
+import org.checkerframework.checker.mungo.typecheck.*
 import org.checkerframework.checker.mungo.typestate.graph.AbstractState
 import org.checkerframework.checker.mungo.typestate.graph.DecisionState
 import org.checkerframework.checker.mungo.typestate.graph.Graph
 import org.checkerframework.checker.mungo.typestate.graph.State
+import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.dataflow.analysis.Store.FlowRule
 import org.checkerframework.dataflow.cfg.ControlFlowGraph
 import org.checkerframework.dataflow.cfg.UnderlyingAST
 import org.checkerframework.dataflow.cfg.UnderlyingAST.*
 import org.checkerframework.dataflow.cfg.block.*
-import org.checkerframework.dataflow.cfg.node.BooleanLiteralNode
-import org.checkerframework.dataflow.cfg.node.ConditionalNotNode
-import org.checkerframework.dataflow.cfg.node.Node
-import org.checkerframework.dataflow.cfg.node.ReturnNode
+import org.checkerframework.dataflow.cfg.node.*
 import org.checkerframework.framework.flow.CFCFGBuilder
+import org.checkerframework.framework.type.AnnotatedTypeMirror
+import org.checkerframework.javacutil.ElementUtils
 import org.checkerframework.javacutil.Pair
 import org.checkerframework.javacutil.TreeUtils
 import java.util.*
+import javax.lang.model.element.AnnotationMirror
+import javax.lang.model.element.Element
+import javax.lang.model.element.ElementKind
+import javax.lang.model.element.ExecutableElement
 import javax.lang.model.type.TypeMirror
 import org.checkerframework.dataflow.analysis.Store.Kind as StoreKind
 
 class Analyzer(private val checker: MainChecker) {
+
+  val utils get() = checker.utils
+  val unknown = StoreInfo(this, MungoUnknownType.SINGLETON, Type.UnknownType())
+  val bottom = StoreInfo(this, MungoBottomType.SINGLETON, Type.noType)
 
   private val processingEnv = checker.processingEnvironment
   private val worklist = Worklist()
 
   private val treeLookup = IdentityHashMap<Tree, MutableSet<Node>>()
 
-  private val inputs = mutableMapOf<Block, AnalyzerResult>()
-  private val resultsBefore = mutableMapOf<Node, AnalyzerResult>()
-  private val resultsAfter = mutableMapOf<Node, AnalyzerResult>()
-  private val resultsExit = mutableMapOf<Tree, AnalyzerResult>()
+  private val inputs = IdentityHashMap<Block, AnalyzerResult>()
+  private val resultsBefore = IdentityHashMap<Node, AnalyzerResult>()
+  private val resultsAfter = IdentityHashMap<Node, AnalyzerResult>()
+  private val resultsExit = IdentityHashMap<Tree, AnalyzerResult>()
 
   private val nodeValues = IdentityHashMap<Node, StoreInfo>()
   private val storesAtReturnStatements = IdentityHashMap<ReturnNode, AnalyzerResult>()
@@ -46,22 +53,72 @@ class Analyzer(private val checker: MainChecker) {
 
   private val visitor = AnalyzerVisitor(checker, this)
 
-  fun getInitialInfo(tree: Tree): StoreInfo {
-    val element = TreeUtils.elementFromTree(tree)
-    if (element != null) {
-      val type = element.asType()
-      val mungoType = getType(type)
-      return StoreInfo(mungoType, type)
-    }
-    return StoreInfo.unknown
+  private lateinit var root: JCTree.JCCompilationUnit
+
+  fun setRoot(root: CompilationUnitTree) {
+    this.root = root as JCTree.JCCompilationUnit
+    visitor.setRoot(root)
   }
 
-  fun getInitialInfo(node: Node): StoreInfo {
-    return StoreInfo(getType(node.type), node.type)
-  }
-
-  fun getType(type: TypeMirror): MungoType {
+  private fun getInvalidatedType(type: TypeMirror): MungoType {
     return MungoTypecheck.invalidate(checker.utils, type)
+  }
+
+  private fun getDeclaredType(type: TypeMirror): MungoType {
+    return MungoTypecheck.typeDeclaration(checker.utils, type)
+  }
+
+  private fun getDeclaredType(type: TypeMirror, annotations: Collection<AnnotationMirror>): MungoType {
+    return MungoTypecheck.typeDeclaration(checker.utils, type, annotations)
+  }
+
+  private fun getDeclaredType(element: Element?, type: TypeMirror): MungoType {
+    // If it is a local variable...
+    if (element?.kind == ElementKind.LOCAL_VARIABLE) {
+      // Annotations do not seem to be attached to the TypeMirror... so get them from the declaration...
+      val decl = TreeInfo.declarationFor(element as Symbol.VarSymbol, root) as? VariableTree?
+      return if (decl == null) getDeclaredType(type) else getDeclaredType(treeToType(decl))
+    }
+    // If it is a parameter...
+    if (element?.kind == ElementKind.PARAMETER) {
+      val annotated = utils.stubFilesProcessor.getTypeFromStub(element)
+      if (annotated is AnnotatedTypeMirror.AnnotatedDeclaredType) {
+        if (annotated.annotations.any { MungoUtils.isMungoLibAnnotation(it) }) {
+          return getDeclaredType(type, annotated.annotations)
+        }
+      }
+      return getDeclaredType(type)
+    }
+    // If the return type has annotations or we are sure we have access to the method's code...
+    if (element is ExecutableElement) {
+      val annotated = utils.stubFilesProcessor.getTypeFromStub(element)
+      if (annotated is AnnotatedTypeMirror.AnnotatedExecutableType) {
+        if (annotated.returnType.annotations.any { MungoUtils.isMungoLibAnnotation(it) }) {
+          return getDeclaredType(type, annotated.returnType.annotations)
+        }
+      }
+      if (!ElementUtils.isElementFromByteCode(element)) {
+        return getDeclaredType(type)
+      }
+    }
+    return getInvalidatedType(type)
+  }
+
+  fun getInitialInfo(tree: Tree, type: TypeMirror = treeToType(tree)): StoreInfo {
+    return StoreInfo(this, getDeclaredType(TreeUtils.elementFromTree(tree), type), type)
+  }
+
+  private fun getInitialInfo(node: Node): StoreInfo {
+    val type = node.type
+    return node.tree?.let { getInitialInfo(it, type) } ?: StoreInfo(this, getInvalidatedType(type), type)
+  }
+
+  fun getInitialInfo(type: TypeMirror, refine: Boolean = false): StoreInfo {
+    return StoreInfo(this, if (refine) {
+      getDeclaredType(type)
+    } else {
+      getInvalidatedType(type)
+    }, type)
   }
 
   fun getInferredType(tree: Tree): MungoType {
@@ -69,7 +126,7 @@ class Analyzer(private val checker: MainChecker) {
   }
 
   fun getInferredInfo(tree: Tree): StoreInfo {
-    val nodes = treeLookup[tree] ?: emptySet<Node>()
+    val nodes = treeLookup[tree] ?: emptySet()
     var info: StoreInfo? = null
     for (node in nodes) {
       if (info == null) {
@@ -81,11 +138,11 @@ class Analyzer(private val checker: MainChecker) {
         }
       }
     }
-    return info ?: StoreInfo.unknown
+    return info ?: unknown
   }
 
   fun getInferredInfo(node: Node): StoreInfo {
-    return nodeValues[node] ?: StoreInfo.unknown
+    return nodeValues[node] ?: unknown
   }
 
   fun getRegularExitStore(tree: Tree): Store? {
@@ -93,7 +150,7 @@ class Analyzer(private val checker: MainChecker) {
   }
 
   fun getResultBefore(tree: Tree): AnalyzerResult {
-    val nodes = treeLookup[tree] ?: emptySet<Node>()
+    val nodes = treeLookup[tree] ?: emptySet()
     val result = MutableAnalyzerResult(MutableStore(), MutableStore())
     for (node in nodes) {
       resultsBefore[node]?.let { result.merge(it) }
@@ -138,19 +195,19 @@ class Analyzer(private val checker: MainChecker) {
   // 2 - Done
   private val scanning = mutableMapOf<ClassTree, Int>()
 
-  fun run(root: CompilationUnitTree, classTree: ClassTree) {
+  fun run(classTree: ClassTree) {
     if (scanning.containsKey(classTree)) return
     scanning[classTree] = 1
 
     val graph = checker.utils.classUtils.visitClassSymbol((classTree as JCTree.JCClassDecl).sym)
     val info = prepareClass(classTree)
-    run(root, classTree, info.static, null)
-    run(root, classTree, info.nonStatic, graph)
+    run(classTree, info.static, null)
+    run(classTree, info.nonStatic, graph)
 
     scanning[classTree] = 2
   }
 
-  private fun run(root: CompilationUnitTree, classTree: JCTree.JCClassDecl, info: ClassInfo, graph: Graph?) {
+  private fun run(classTree: JCTree.JCClassDecl, info: ClassInfo, graph: Graph?) {
     // Static fields/initializers are executed when a class is first loaded in textual order
     // Instance fields/initializers are executed when an object is instantiated in textual order
 
@@ -163,13 +220,13 @@ class Analyzer(private val checker: MainChecker) {
       val initializer = field.initializer
       if (initializer != null) {
         currentStore = run(
-          root,
           CFGStatement(field, classTree),
           currentStore
         ).regularStore
       } else {
         val store = currentStore.toMutable()
-        store[getReference(field.nameExpression)!!] = getInitialInfo(field)
+        val internal = createFieldAccess(field, classTree)
+        store[internal] = StoreInfo(this, MungoNullType.SINGLETON, internal.type)
         currentStore = store.toImmutable()
       }
     }
@@ -177,7 +234,6 @@ class Analyzer(private val checker: MainChecker) {
     // Analyze blocks
     for (block in info.blocks) {
       currentStore = run(
-        root,
         CFGStatement(block, classTree),
         currentStore
       ).regularStore
@@ -197,7 +253,6 @@ class Analyzer(private val checker: MainChecker) {
     // Analyze constructors
     for (method in info.constructorMethods) {
       val result = run(
-        root,
         CFGMethod(method, classTree),
         currentStore
       )
@@ -212,7 +267,6 @@ class Analyzer(private val checker: MainChecker) {
     // Analyze non public methods
     for (method in info.nonPublicMethods) {
       run(
-        root,
         CFGMethod(method, classTree),
         storeForNonPublicMethods
       )
@@ -222,9 +276,9 @@ class Analyzer(private val checker: MainChecker) {
 
     // Analyze public methods
     if (graph == null) {
-      analyzeClassWithoutProtocol(root, classTree, info.publicMethods, storeForPublicMethods)
+      analyzeClassWithoutProtocol(classTree, info.publicMethods, storeForPublicMethods)
     } else {
-      analyzeClassWithProtocol(root, classTree, info.publicMethods, graph, storeForPublicMethods)
+      analyzeClassWithProtocol(classTree, info.publicMethods, graph, storeForPublicMethods)
     }
 
     // Analyze other classes
@@ -243,7 +297,6 @@ class Analyzer(private val checker: MainChecker) {
   }
 
   private fun run(
-    root: CompilationUnitTree,
     ast: UnderlyingAST,
     capturedStore: Store
   ): AnalyzerResult {
@@ -260,7 +313,7 @@ class Analyzer(private val checker: MainChecker) {
     // Run
     var block = worklist.poll()
     while (block != null) {
-      run(root, block)
+      run(block)
       block = worklist.poll()
     }
 
@@ -292,21 +345,21 @@ class Analyzer(private val checker: MainChecker) {
     return exitResult
   }
 
-  private fun run(root: CompilationUnitTree, block: Block) {
+  private fun run(block: Block) {
     val inputBefore = inputs[block]!!
     when (block) {
       is RegularBlock -> {
         val succ = block.successor!!
         var result = inputBefore
         for (n in block.contents) {
-          result = callInferrer(root, n, result)
+          result = callInferrer(n, result)
         }
         propagateStoresTo(succ, result, block.flowRule)
       }
       is ExceptionBlock -> {
         val node = block.node
         val succ = block.successor
-        val result = callInferrer(root, node, inputBefore)
+        val result = callInferrer(node, inputBefore)
 
         // Propagate store
         if (succ != null) {
@@ -349,21 +402,38 @@ class Analyzer(private val checker: MainChecker) {
     }
   }
 
-  private fun callInferrer(root: CompilationUnitTree, node: Node, input: AnalyzerResult): AnalyzerResult {
-    if (node.isLValue) {
-      // TODO ??
-      val store = input.regularStore.toMutable()
-      return AnalyzerResult(store, store)
-    }
+  private fun debug(node: Node) = false
 
+  private fun callInferrer(node: Node, input: AnalyzerResult): AnalyzerResult {
     // Store previous result
-    resultsBefore[node] = input // AnalyzerResult.merge(resultsBefore[node], input)
+    resultsBefore[node] = input
+
+    if (node.isLValue) {
+      resultsAfter[node] = input
+      if (debug(node)) {
+        println("---")
+        println(node)
+        println(input)
+        println("---")
+      }
+      return input
+    }
 
     val initialValue = getInitialInfo(node)
     val mutableResult = MutableAnalyzerResultWithValue(initialValue, input)
 
-    visitor.setRoot(root)
+    if (debug(node)) {
+      println("---")
+      println(node)
+      println(mutableResult)
+    }
+
     node.accept(visitor, mutableResult)
+
+    if (debug(node)) {
+      println(mutableResult)
+      println("---")
+    }
 
     // Merge then and else stores
     if (!shouldEachToEach(node)) {
@@ -404,6 +474,7 @@ class Analyzer(private val checker: MainChecker) {
         }
         return shouldEachToEach(node, block.successor)
       }
+      is ExceptionBlock -> return shouldEachToEach(node, block.successor)
       else -> false
     }
   }
@@ -465,14 +536,14 @@ class Analyzer(private val checker: MainChecker) {
     s: Store,
     kind: StoreKind
   ) {
-    val input = inputs[b]!!
-    val thenStore = input.thenStore
-    val elseStore = input.elseStore
+    val input = inputs[b]
+    val thenStore = input?.thenStore ?: Store.empty
+    val elseStore = input?.elseStore ?: Store.empty
     when (kind) {
       StoreKind.THEN -> {
         // Update the then store
         val newThenStore = Store.merge(s, thenStore)
-        if (newThenStore != thenStore) {
+        if (input == null || newThenStore != thenStore) {
           inputs[b] = AnalyzerResult(newThenStore, elseStore)
           worklist.add(b)
         }
@@ -480,7 +551,7 @@ class Analyzer(private val checker: MainChecker) {
       StoreKind.ELSE -> {
         // Update the else store
         val newElseStore = Store.merge(s, elseStore)
-        if (newElseStore != elseStore) {
+        if (input == null || newElseStore != elseStore) {
           inputs[b] = AnalyzerResult(thenStore, newElseStore)
           worklist.add(b)
         }
@@ -490,14 +561,14 @@ class Analyzer(private val checker: MainChecker) {
         if (sameStore) {
           // Currently there is only one regular store
           val newStore = Store.merge(s, thenStore)
-          if (newStore != thenStore) {
+          if (input == null || newStore != thenStore) {
             inputs[b] = AnalyzerResult(newStore, newStore)
             worklist.add(b)
           }
         } else {
           val newThenStore = Store.merge(s, thenStore)
           val newElseStore = Store.merge(s, elseStore)
-          if (newThenStore != thenStore || newElseStore != elseStore) {
+          if (input == null || newThenStore != thenStore || newElseStore != elseStore) {
             inputs[b] = AnalyzerResult(newThenStore, newElseStore)
             worklist.add(b)
           }
@@ -509,7 +580,6 @@ class Analyzer(private val checker: MainChecker) {
   // Class analysis
 
   private fun analyzeClassWithProtocol(
-    root: CompilationUnitTree,
     classTree: JCTree.JCClassDecl,
     publicMethods: List<MethodTree>,
     graph: Graph,
@@ -571,7 +641,7 @@ class Analyzer(private val checker: MainChecker) {
 
       for ((method, destState) in methodToStates) {
         val entryStore = mergeMethodStore(method, store) ?: continue
-        val result = run(root, CFGMethod(method, classTree), entryStore)
+        val result = run(CFGMethod(method, classTree), entryStore)
         val constantReturn = getConstantReturn(returnStatementStores[method]!!.map { it.first })
 
         // Merge new exit store with the stores of each destination state
@@ -596,7 +666,6 @@ class Analyzer(private val checker: MainChecker) {
   }
 
   private fun analyzeClassWithoutProtocol(
-    root: CompilationUnitTree,
     classTree: JCTree.JCClassDecl,
     publicMethods: List<MethodTree>,
     initialStore: Store
@@ -623,7 +692,7 @@ class Analyzer(private val checker: MainChecker) {
       val entryStore = globalStore
 
       for (method in publicMethods) {
-        val result = run(root, CFGMethod(method, classTree), entryStore)
+        val result = run(CFGMethod(method, classTree), entryStore)
         // Merge new exit store with the global store
         updateGlobalStore(result.regularStore)
       }

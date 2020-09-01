@@ -2,7 +2,7 @@ package org.checkerframework.checker.mungo.annotators
 
 import com.sun.source.tree.*
 import com.sun.tools.javac.tree.JCTree
-import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.old.MungoChecker
 import org.checkerframework.checker.mungo.analysis.*
 import org.checkerframework.checker.mungo.qualifiers.MungoBottom
 import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo

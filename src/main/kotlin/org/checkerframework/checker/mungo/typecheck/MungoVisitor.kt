@@ -5,7 +5,7 @@ import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.tree.JCTree
 import com.sun.tools.javac.tree.TreeInfo
 import org.checkerframework.checker.compilermsgs.qual.CompilerMessageKey
-import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.old.MungoChecker
 import org.checkerframework.checker.mungo.analysis.MungoStore
 import org.checkerframework.checker.mungo.analysis.MungoValue
 import org.checkerframework.checker.mungo.annotators.MungoAnnotatedTypeFactory

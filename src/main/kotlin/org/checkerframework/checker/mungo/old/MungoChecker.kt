@@ -1,4 +1,4 @@
-package org.checkerframework.checker.mungo
+package org.checkerframework.checker.mungo.old
 
 import org.checkerframework.checker.mungo.typecheck.MungoVisitor
 import org.checkerframework.checker.mungo.utils.MungoUtils

@@ -3,7 +3,7 @@ package org.checkerframework.checker.mungo.analysis
 import com.sun.source.tree.*
 import com.sun.source.util.TreePath
 import com.sun.tools.javac.code.Symbol
-import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.old.MungoChecker
 import org.checkerframework.checker.mungo.typecheck.MungoMovedType
 import org.checkerframework.checker.mungo.typecheck.MungoNullType
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck

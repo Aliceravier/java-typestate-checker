@@ -6,7 +6,7 @@ import com.sun.source.tree.LambdaExpressionTree
 import com.sun.source.tree.MethodTree
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.tree.JCTree
-import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.old.MungoChecker
 import org.checkerframework.checker.mungo.annotators.MungoAnnotatedTypeFactory
 import org.checkerframework.checker.mungo.typestate.graph.AbstractState
 import org.checkerframework.checker.mungo.typestate.graph.DecisionState

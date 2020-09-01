@@ -1,14 +1,13 @@
 package org.checkerframework.checker.mungo.core
 
-import com.sun.source.tree.IdentifierTree
-import com.sun.source.tree.MemberSelectTree
-import com.sun.source.tree.Tree
+import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol.VarSymbol
 import org.checkerframework.dataflow.cfg.node.*
 import org.checkerframework.javacutil.ElementUtils
 import org.checkerframework.javacutil.TreeUtils
 import javax.lang.model.element.Element
 import javax.lang.model.element.ElementKind.*
+import javax.lang.model.element.Modifier
 import javax.lang.model.element.VariableElement
 import javax.lang.model.type.TypeMirror
 
@@ -99,9 +98,17 @@ sealed class Reference(val type: TypeMirror) {
   abstract fun isThisField(): Boolean
 }
 
+fun createFieldAccess(tree: VariableTree, classTree: ClassTree): FieldAccess {
+  val receiverType = treeToType(classTree)
+  val type = treeToType(tree)
+  val element = TreeUtils.elementFromTree(tree) as VariableElement
+  return FieldAccess(ThisReference(receiverType), type, element)
+}
+
 class FieldAccess(val receiver: Reference, type: TypeMirror, val field: VariableElement) : Reference(type) {
   val isFinal get() = ElementUtils.isFinal(field)
   val isStatic get() = ElementUtils.isStatic(field)
+  val isNonPrivate = !field.modifiers.contains(Modifier.PRIVATE)
 
   override fun isThisField(): Boolean {
     return receiver.isThisField()
@@ -117,6 +124,10 @@ class FieldAccess(val receiver: Reference, type: TypeMirror, val field: Variable
     result = 31 * result + field.hashCode()
     return result
   }
+
+  override fun toString(): String {
+    return "FieldAccess{${receiver}.$field}"
+  }
 }
 
 class ThisReference(type: TypeMirror) : Reference(type) {
@@ -130,6 +141,10 @@ class ThisReference(type: TypeMirror) : Reference(type) {
 
   override fun hashCode(): Int {
     return 0
+  }
+
+  override fun toString(): String {
+    return "ThisReference"
   }
 }
 
@@ -147,6 +162,10 @@ class ClassName(type: TypeMirror) : Reference(type) {
 
   override fun hashCode(): Int {
     return typeString.hashCode()
+  }
+
+  override fun toString(): String {
+    return "ClassName{$typeString}"
   }
 }
 
@@ -174,5 +193,9 @@ class LocalVariable(type: TypeMirror, val element: VarSymbol) : Reference(type) 
     var result = elementName.hashCode()
     result = 31 * result + ownerName.hashCode()
     return result
+  }
+
+  override fun toString(): String {
+    return "LocalVariable{$elementName}"
   }
 }

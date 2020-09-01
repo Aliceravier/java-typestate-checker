@@ -3,6 +3,7 @@ package org.checkerframework.checker.mungo.core
 import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Type
+import org.checkerframework.checker.mungo.MainChecker
 import org.checkerframework.checker.mungo.typecheck.*
 import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.javacutil.AnnotationUtils
@@ -18,10 +19,6 @@ import javax.lang.model.type.TypeMirror
 // TODO check arrays of non-null items are initialized
 
 class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
-
-  init {
-    checker.utils.stubFilesProcessor.init()
-  }
 
   // root
   // currentPath
@@ -51,7 +48,8 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
   }
 
   override fun visitClass(classTree: ClassTree, p: Void?): Void? {
-    analyzer.run(root, classTree)
+    analyzer.setRoot(root)
+    analyzer.run(classTree)
 
     analyzer.getStatesToStore(classTree)?.let {
       for ((state, store) in it) {
@@ -153,7 +151,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     val expectedParams = expandVarArgs(element, node.arguments)
 
     for (i in expectedParams.indices) {
-      commonAssignmentCheck(expectedParams[i], node.arguments[i], "argument.type.incompatible")
+      commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")
     }
 
     val upperBounds = mutableListOf<TypeMirror>()
@@ -180,7 +178,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     val expectedParams = expandVarArgs(element, node.arguments)
 
     for (i in expectedParams.indices) {
-      commonAssignmentCheck(expectedParams[i], node.arguments[i], "argument.type.incompatible")
+      commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")
     }
 
     val upperBounds = mutableListOf<TypeMirror>()
@@ -206,15 +204,16 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
       // Check return type for single statement returns here.
       val ret = fnType.returnType
       if (ret.kind != TypeKind.VOID) {
-        commonAssignmentCheck(ret, node.body as ExpressionTree, "return.type.incompatible")
+        commonAssignmentCheckReturn(ret, node.body)
       }
     }
 
     // Check parameters
     for (i in fnType.parameterTypes.indices) {
-      val lambdaParam = TreeUtils.elementFromTree(node.parameters[i])!!.asType()
+      val lambdaParam = treeToType(node.parameters[i])
       commonAssignmentCheck(
         lambdaParam,
+        null,
         fnType.parameterTypes[i],
         node.parameters[i],
         "lambda.param.type.incompatible"
@@ -245,7 +244,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
       TreeUtils.findFunction(enclosing, checker.processingEnvironment).asType().returnType
     }
     if (ret != null) {
-      commonAssignmentCheck(ret, node.expression, "return.type.incompatible")
+      commonAssignmentCheckReturn(ret, node.expression)
     }
     return super.visitReturn(node, p)
   }
@@ -258,12 +257,12 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
       || nodeKind == Tree.Kind.PREFIX_INCREMENT
       || nodeKind == Tree.Kind.POSTFIX_DECREMENT
       || nodeKind == Tree.Kind.POSTFIX_INCREMENT) {
-      val varType = TreeUtils.elementFromTree(node.expression)!!.asType()
-      val valueType = TreeUtils.elementFromTree(node)!!.asType()
+      val varType = treeToType(node.expression)
+      val valueType = treeToType(node)
       val errorKey = if (nodeKind == Tree.Kind.PREFIX_INCREMENT || nodeKind == Tree.Kind.POSTFIX_INCREMENT)
         "unary.increment.type.incompatible" else
         "unary.decrement.type.incompatible"
-      commonAssignmentCheck(varType, valueType, node, errorKey)
+      commonAssignmentCheck(varType, null, valueType, node, errorKey)
     }
     return super.visitUnary(node, p)
   }
@@ -284,10 +283,10 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
   }
 
   override fun visitNewArray(node: NewArrayTree, p: Void?): Void? {
-    val arrayType = TreeUtils.elementFromTree(node)!!.asType() as Type.ArrayType
+    val arrayType = treeToType(node) as Type.ArrayType
     if (node.initializers != null) {
       for (init in node.initializers) {
-        commonAssignmentCheck(arrayType.componentType, init, "array.initializer.type.incompatible")
+        commonAssignmentCheckParameter(arrayType.componentType, init, "array.initializer.type.incompatible")
       }
     }
     return super.visitNewArray(node, p)
@@ -314,7 +313,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     val element = TreeUtils.elementFromTree(node) as? Symbol.VarSymbol ?: return p
 
     // Print type information for testing purposes
-    printTypeInfo(node)
+    printTypeInfo(currentPath, node)
 
     if (utils.wasMovedToDiffClosure(currentPath, node, element)) {
       utils.err("$node was moved to a different closure", node)

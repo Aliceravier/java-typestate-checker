@@ -1,27 +1,40 @@
 package org.checkerframework.checker.mungo.core
 
+import com.sun.source.util.TreePath
+import org.checkerframework.checker.mungo.qualifiers.MungoBottom
+import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo
+import org.checkerframework.checker.mungo.qualifiers.MungoUnknown
+import org.checkerframework.checker.mungo.typecheck.MungoBottomType
+import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
 import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.common.basetype.BaseTypeChecker
 import org.checkerframework.framework.source.SourceChecker
 import org.checkerframework.framework.stub.StubTypes
 import org.checkerframework.framework.type.AnnotatedTypeFactory
 import org.checkerframework.framework.type.AnnotatedTypeMirror
+import org.checkerframework.framework.type.QualifierHierarchy
 import org.checkerframework.framework.util.CFContext
+import org.checkerframework.framework.util.GraphQualifierHierarchy
+import org.checkerframework.framework.util.MultiGraphQualifierHierarchy
 import org.checkerframework.javacutil.BugInCF
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.AnnotationMirror
 import javax.lang.model.element.Element
+import javax.lang.model.element.TypeElement
 
-private class FakeBasicTypeChecker(private val myChecker: SourceChecker) : BaseTypeChecker() {
-  override fun getProcessingEnvironment(): ProcessingEnvironment {
-    return myChecker.processingEnvironment
+private class FakeBasicTypeChecker(myChecker: SourceChecker) : BaseTypeChecker() {
+  init {
+    processingEnvironment = myChecker.processingEnvironment
   }
 }
 
-private class FakeAnnotatedTypeFactory(private val myChecker: SourceChecker) : AnnotatedTypeFactory(FakeBasicTypeChecker(myChecker)) {
+private class FakeAnnotatedTypeFactory(myChecker: SourceChecker) : AnnotatedTypeFactory(FakeBasicTypeChecker(myChecker)) {
 
   private val typesFromStubFilesField = StubTypes::class.java.getDeclaredField("typesFromStubFiles")
   private val typesFromStubFiles = mutableMapOf<Element, AnnotatedTypeMirror>()
+
+  private val topAnnotation = MungoUnknownType.SINGLETON.buildAnnotation(checker.processingEnvironment)
+  private val bottomAnnotation = MungoBottomType.SINGLETON.buildAnnotation(checker.processingEnvironment)
 
   init {
     typesFromStubFilesField.isAccessible = true
@@ -31,6 +44,32 @@ private class FakeAnnotatedTypeFactory(private val myChecker: SourceChecker) : A
     typeArgumentInference = createTypeArgumentInference()
     qualifierUpperBounds = createQualifierUpperBounds()
     parseStubFiles()
+  }
+
+  override fun createSupportedTypeQualifiers(): Set<Class<out Annotation>> {
+    return setOf(MungoBottom::class.java, MungoInternalInfo::class.java, MungoUnknown::class.java)
+  }
+
+  override fun createQualifierHierarchy(factory: MultiGraphQualifierHierarchy.MultiGraphFactory): QualifierHierarchy {
+    return MungoQualifierHierarchy(factory, bottomAnnotation)
+  }
+
+  private inner class MungoQualifierHierarchy(f: MultiGraphFactory, bottom: AnnotationMirror) : GraphQualifierHierarchy(f, bottom) {
+    override fun findTops(supertypes: MutableMap<AnnotationMirror, MutableSet<AnnotationMirror>>?): MutableSet<AnnotationMirror> {
+      return mutableSetOf(topAnnotation)
+    }
+
+    override fun findBottoms(supertypes: MutableMap<AnnotationMirror, MutableSet<AnnotationMirror>>?): MutableSet<AnnotationMirror> {
+      return mutableSetOf(bottomAnnotation)
+    }
+
+    override fun getTopAnnotation(start: AnnotationMirror?): AnnotationMirror = topAnnotation
+
+    override fun getBottomAnnotation(start: AnnotationMirror?): AnnotationMirror = bottomAnnotation
+
+    override fun isSubtype(subAnno: AnnotationMirror, superAnno: AnnotationMirror): Boolean {
+      return true
+    }
   }
 
   override fun parseStubFiles() {
@@ -51,20 +90,8 @@ private class FakeAnnotatedTypeFactory(private val myChecker: SourceChecker) : A
   override fun isSupportedQualifier(className: String?) = className != null
   override fun isSupportedQualifier(clazz: Class<out Annotation>?) = clazz != null
 
-  override fun getContext(): CFContext {
-    return myChecker
-  }
-
-  override fun getProcessingEnv(): ProcessingEnvironment {
-    return myChecker.processingEnvironment
-  }
-
   override fun shouldWarnIfStubRedundantWithBytecode(): Boolean {
     return true
-  }
-
-  override fun fromElement(elt: Element): AnnotatedTypeMirror {
-    return super.fromElement(elt)
   }
 
 }
