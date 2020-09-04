@@ -478,7 +478,7 @@ public class LinearityTests {
   public static void useNullable2(@MungoNullable @MungoRequires("State0") @MungoEnsures("State1") Linearity obj) {
     // :: warning: (obj: Linearity{State0} | Null)
     if (obj != null) {
-      // :: warning: (obj: Linearity{State0|State1} | Ended | Moved | Null)
+      // :: warning: (obj: Linearity{State0})
       // :: error: (Cannot override because object is not in the state specified by @MungoEnsures. Type: Linearity{State0})
       // :: error: (Cannot override because object has not ended its protocol. Type: Linearity{State0})
       obj = null;
