@@ -7,7 +7,7 @@ import org.checkerframework.checker.mungo.MainChecker
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
 import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.framework.type.AnnotatedTypeMirror
-import org.checkerframework.framework.type.AnnotatedTypeMirror.AnnotatedExecutableType
+import org.checkerframework.framework.util.AnnotatedTypes
 import org.checkerframework.javacutil.AnnotationUtils
 import org.checkerframework.javacutil.ElementUtils
 import org.checkerframework.javacutil.TreeUtils
@@ -99,12 +99,18 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
   override fun visitEnhancedForLoop(node: EnhancedForLoopTree, p: Void?): Void? {
     checkForNullability(node.expression, ITERATING_NULLABLE)
 
-    // TODO Performs a subtype check, to test whether the node expression iterable type is a subtype of the variable type in the enhanced for loop.
+    // Performs a subtype check, to test whether the node expression iterable type is a subtype of the variable type in the enhanced for loop
+    val variable = utils.factory.getAnnotatedType(node.variable)
+    val iterableType = utils.factory.getAnnotatedType(node.expression)
+    val iteratedType = AnnotatedTypes.getIteratedType(checker.processingEnvironment, utils.factory, iterableType)
+    commonAssignmentCheck(
+      variable.underlyingType,
+      node.variable,
+      iteratedType.underlyingType,
+      node.expression,
+      "enhancedfor.type.incompatible"
+    )
 
-    /*val variable: AnnotatedTypeMirror = getAnnotatedTypeLhs(node.variable)
-    val iterableType: AnnotatedTypeMirror = getAnnotatedType(node.expression)
-    val iteratedType = AnnotatedTypes.getIteratedType(checker.processingEnvironment, atypeFactory, iterableType)
-    commonAssignmentCheck(variable, iteratedType, node.expression, "enhancedfor.type.incompatible")*/
     return super.visitEnhancedForLoop(node, p)
   }
 
@@ -303,6 +309,14 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     return super.visitNewArray(node, p)
   }
 
+  private fun checkTypecastSafety(typeCastTree: TypeCastTree) {
+    val castType = analyzer.getInferredType(typeCastTree)
+    val exprType = analyzer.getInferredType(typeCastTree.expression)
+    if (!exprType.isSubtype(castType)) {
+      checker.reportWarning(typeCastTree, "cast.unsafe", exprType.format(), castType.format())
+    }
+  }
+
   override fun visitTypeCast(node: TypeCastTree, p: Void?): Void? {
     if (isPrimitive(node) && !isPrimitive(node.expression)) {
       if (!checkForNullability(node.expression, UNBOXING_OF_NULLABLE)) {
@@ -310,7 +324,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
         return null
       }
     }
-    // TODO checkTypecastSafety(node)
+    checkTypecastSafety(node)
     // TODO checkTypecastRedundancy(node)
     return super.visitTypeCast(node, p)
   }

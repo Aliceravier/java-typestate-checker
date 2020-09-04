@@ -174,8 +174,8 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
     when (left) {
       is VariableTree -> {
         // In case we are in a loop, ensure the object from the previous loop has completed its protocol
-        val receiver = getReference(left) ?: return
-        val leftValue = analyzer.getStoreBefore(left)[receiver] ?: analyzer.getInitialInfo(left)
+        val receiver = LocalVariable(TreeUtils.elementFromDeclaration(left))
+        val leftValue = analyzer.getStoreBefore(left)[receiver] ?: return
         checkFinalType(receiver.toString(), leftValue, left)
       }
       is ExpressionTree -> {
