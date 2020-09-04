@@ -52,7 +52,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   private fun getCurrentInfo(res: MutableAnalyzerResultWithValue, node: Node, default: StoreInfo): StoreInfo {
-    return getReference(node)?.let { res.getInfo(it) } ?: analyzer.getInferredInfo(node, default)
+    return getReference(node)?.let { res.getInfo(it) } ?: analyzer.getCurrentInferredInfo(node, default)
   }
 
   private fun setCurrentInfo(res: MutableAnalyzerResultWithValue, node: Node, info: StoreInfo) {
@@ -63,14 +63,14 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   private fun refineStore(invocation: MethodInvocationNode, method: Symbol.MethodSymbol, receiver: Reference, store: MutableStore, predicate: (String) -> Boolean) {
-    val prevValue = analyzer.getInferredInfo(invocation.target.receiver)
+    val prevValue = analyzer.getCurrentInferredInfo(invocation.target.receiver)
     val prevInfo = prevValue.mungoType
     val newInfo = MungoTypecheck.refine(utils, invocation.treePath, prevInfo, method, predicate)
     store[receiver] = StoreInfo(prevValue, newInfo)
   }
 
   private fun refineStoreMore(invocation: MethodInvocationNode, method: Symbol.MethodSymbol, receiver: Reference, store: MutableStore, predicate: (String) -> Boolean) {
-    val prevValue = analyzer.getInferredInfo(invocation.target.receiver)
+    val prevValue = analyzer.getCurrentInferredInfo(invocation.target.receiver)
     val prevInfo = prevValue.mungoType
     val newInfo = MungoTypecheck.refine(utils, invocation.treePath, prevInfo, method, predicate)
     // We are refining a switch case or an expression after the method invocation was done,
@@ -106,8 +106,8 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   override fun visitTernaryExpression(n: TernaryExpressionNode, res: MutableAnalyzerResultWithValue): Void? {
-    val thenValue = analyzer.getInferredInfo(n.thenOperand)
-    val elseValue = analyzer.getInferredInfo(n.elseOperand)
+    val thenValue = analyzer.getCurrentInferredInfo(n.thenOperand)
+    val elseValue = analyzer.getCurrentInferredInfo(n.elseOperand)
     res.value = StoreInfo.merge(thenValue, elseValue)
     return null
   }
@@ -131,8 +131,8 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   override fun visitEqualTo(n: EqualToNode, res: MutableAnalyzerResultWithValue): Void? {
     val leftN = n.leftOperand
     val rightN = n.rightOperand
-    val leftV = analyzer.getInferredInfo(leftN)
-    val rightV = analyzer.getInferredInfo(rightN)
+    val leftV = analyzer.getCurrentInferredInfo(leftN)
+    val rightV = analyzer.getCurrentInferredInfo(rightN)
 
     // if annotations differ, use the one that is more precise for both
     // sides (and add it to the store if possible)
@@ -144,8 +144,8 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   override fun visitNotEqual(n: NotEqualNode, res: MutableAnalyzerResultWithValue): Void? {
     val leftN = n.leftOperand
     val rightN = n.rightOperand
-    val leftV = analyzer.getInferredInfo(leftN)
-    val rightV = analyzer.getInferredInfo(rightN)
+    val leftV = analyzer.getCurrentInferredInfo(leftN)
+    val rightV = analyzer.getCurrentInferredInfo(rightN)
 
     // if annotations differ, use the one that is more precise for both
     // sides (and add it to the store if possible)
@@ -200,13 +200,13 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   override fun visitAssignment(n: AssignmentNode, result: MutableAnalyzerResultWithValue): Void? {
     val lhs = n.target
     val rhs = n.expression
-    val rhsValue = analyzer.getInferredInfo(rhs)
+    val rhsValue = analyzer.getCurrentInferredInfo(rhs)
     setCurrentInfo(result, lhs, rhsValue)
 
     // Restore the type of the receiver
     val target = n.target
     if (target is FieldAccessNode) {
-      setCurrentInfo(result, target.receiver, analyzer.getInferredInfo(target.receiver))
+      setCurrentInfo(result, target.receiver, analyzer.getCurrentInferredInfo(target.receiver))
     }
 
     // Handle move in assignment
@@ -280,7 +280,6 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
     if (!isSideEffectFree(method)) {
       // result.thenStore.invalidate(utils)
       // result.elseStore.invalidate(utils)
-      // TODO invalidate all fields? not just from "this"?
       result.thenStore.invalidateFields(utils)
       result.elseStore.invalidateFields(utils)
     }
@@ -324,7 +323,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   override fun visitCase(n: CaseNode, result: MutableAnalyzerResultWithValue): Void? {
-    val caseValue = analyzer.getInferredInfo(n.caseOperand)
+    val caseValue = analyzer.getCurrentInferredInfo(n.caseOperand)
     val assign = n.switchOperand as AssignmentNode
     val switchValue = getCurrentInfo(result, assign.target, analyzer.unknown)
     strengthenAnnotationOfEqualTo(
@@ -364,17 +363,17 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   override fun visitNarrowingConversion(n: NarrowingConversionNode, result: MutableAnalyzerResultWithValue): Void? {
-    result.value = analyzer.getInferredInfo(n.operand)
+    result.value = analyzer.getCurrentInferredInfo(n.operand)
     return null
   }
 
   override fun visitWideningConversion(n: WideningConversionNode, result: MutableAnalyzerResultWithValue): Void? {
-    result.value = analyzer.getInferredInfo(n.operand)
+    result.value = analyzer.getCurrentInferredInfo(n.operand)
     return null
   }
 
   override fun visitStringConversion(n: StringConversionNode, result: MutableAnalyzerResultWithValue): Void? {
-    result.value = analyzer.getInferredInfo(n.operand)
+    result.value = analyzer.getCurrentInferredInfo(n.operand)
     return null
   }
 

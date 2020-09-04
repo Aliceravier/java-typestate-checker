@@ -126,7 +126,7 @@ class FieldAccess(val receiver: Reference, type: TypeMirror, val field: Variable
   }
 
   override fun toString(): String {
-    return "FieldAccess{${receiver}.$field}"
+    return "$receiver.$field"
   }
 }
 
@@ -144,7 +144,7 @@ class ThisReference(type: TypeMirror) : Reference(type) {
   }
 
   override fun toString(): String {
-    return "ThisReference"
+    return "this"
   }
 }
 
@@ -196,6 +196,6 @@ class LocalVariable(type: TypeMirror, val element: VarSymbol) : Reference(type) 
   }
 
   override fun toString(): String {
-    return "LocalVariable{$elementName}"
+    return elementName
   }
 }

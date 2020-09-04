@@ -147,8 +147,31 @@ class Analyzer(private val checker: MainChecker) {
     return info ?: unknown
   }
 
-  fun getInferredInfo(node: Node, default: StoreInfo = unknown): StoreInfo {
-    return nodeValues[node] ?: default
+  // Some inference results depend on nodeValues, which might have changed.
+  // We track these dependencies so that we can rerun blocks even if the stores did not change.
+
+  private lateinit var currentBlock: Block
+  private val dependencies = WeakIdentityHashMap<Block, MutableSet<Pair<Node, StoreInfo?>>>()
+
+  private fun addToWorklist(block: Block) {
+    worklist.add(block)
+    dependencies.remove(block)
+  }
+
+  private fun didNodeValuesChange(block: Block): Boolean {
+    return dependencies[block]?.any { pair -> nodeValues[pair.first] != pair.second } ?: false
+  }
+
+  // Used during analysis
+  fun getCurrentInferredInfo(node: Node, default: StoreInfo = unknown): StoreInfo {
+    val value = nodeValues[node]
+    dependencies.computeIfAbsent(currentBlock) { mutableSetOf() }.add(Pair.of(node, value))
+    return value ?: default
+  }
+
+  // Used after analysis
+  fun getInferredInfo(node: Node): StoreInfo {
+    return nodeValues[node] ?: unknown
   }
 
   fun getRegularExitStore(tree: Tree): Store? {
@@ -395,6 +418,8 @@ class Analyzer(private val checker: MainChecker) {
   }
 
   private fun run(block: Block) {
+    currentBlock = block
+
     val inputBefore = inputs[block]!!
     when (block) {
       is RegularBlock -> {
@@ -594,7 +619,9 @@ class Analyzer(private val checker: MainChecker) {
         val newThenStore = Store.merge(s, thenStore)
         if (input == null || newThenStore != thenStore) {
           inputs[b] = AnalyzerResult(newThenStore, elseStore)
-          worklist.add(b)
+          addToWorklist(b)
+        } else if (didNodeValuesChange(b)) {
+          addToWorklist(b)
         }
       }
       StoreKind.ELSE -> {
@@ -602,7 +629,9 @@ class Analyzer(private val checker: MainChecker) {
         val newElseStore = Store.merge(s, elseStore)
         if (input == null || newElseStore != elseStore) {
           inputs[b] = AnalyzerResult(thenStore, newElseStore)
-          worklist.add(b)
+          addToWorklist(b)
+        } else if (didNodeValuesChange(b)) {
+          addToWorklist(b)
         }
       }
       StoreKind.BOTH -> {
@@ -612,14 +641,18 @@ class Analyzer(private val checker: MainChecker) {
           val newStore = Store.merge(s, thenStore)
           if (input == null || newStore != thenStore) {
             inputs[b] = AnalyzerResult(newStore, newStore)
-            worklist.add(b)
+            addToWorklist(b)
+          } else if (didNodeValuesChange(b)) {
+            addToWorklist(b)
           }
         } else {
           val newThenStore = Store.merge(s, thenStore)
           val newElseStore = Store.merge(s, elseStore)
           if (input == null || newThenStore != thenStore || newElseStore != elseStore) {
             inputs[b] = AnalyzerResult(newThenStore, newElseStore)
-            worklist.add(b)
+            addToWorklist(b)
+          } else if (didNodeValuesChange(b)) {
+            addToWorklist(b)
           }
         }
       }
