@@ -42,13 +42,13 @@ public class LinkedList {
 
   public @MungoNullable Item get(int idx) {
     @MungoNullable Node node = this.head;
-    // :: warning: (node: NoProtocol | Null)
+    // :: warning: (node: Null | NoProtocol)
     for (int i = 0; node != null && i < idx; i++) {
       node = node.next;
     }
     // type of expression: Item{State0|State1} | Null | Ended | Moved
     // method return type: Item{State0|State1} | Null
-    // :: warning: (node: NoProtocol | Null)
+    // :: warning: (node: Null | NoProtocol)
     // :: error: (return.type.incompatible)
     return node == null ? null : node.value;
   }

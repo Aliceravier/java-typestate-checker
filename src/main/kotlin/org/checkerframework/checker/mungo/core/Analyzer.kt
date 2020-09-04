@@ -6,7 +6,10 @@ import com.sun.tools.javac.code.Type
 import com.sun.tools.javac.tree.JCTree
 import com.sun.tools.javac.tree.TreeInfo
 import org.checkerframework.checker.mungo.MainChecker
-import org.checkerframework.checker.mungo.typecheck.*
+import org.checkerframework.checker.mungo.typecheck.MungoNullType
+import org.checkerframework.checker.mungo.typecheck.MungoType
+import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
+import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
 import org.checkerframework.checker.mungo.typestate.graph.AbstractState
 import org.checkerframework.checker.mungo.typestate.graph.DecisionState
 import org.checkerframework.checker.mungo.typestate.graph.Graph
@@ -17,12 +20,16 @@ import org.checkerframework.dataflow.cfg.ControlFlowGraph
 import org.checkerframework.dataflow.cfg.UnderlyingAST
 import org.checkerframework.dataflow.cfg.UnderlyingAST.*
 import org.checkerframework.dataflow.cfg.block.*
-import org.checkerframework.dataflow.cfg.node.*
+import org.checkerframework.dataflow.cfg.node.BooleanLiteralNode
+import org.checkerframework.dataflow.cfg.node.ConditionalNotNode
+import org.checkerframework.dataflow.cfg.node.Node
+import org.checkerframework.dataflow.cfg.node.ReturnNode
 import org.checkerframework.framework.flow.CFCFGBuilder
 import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.javacutil.ElementUtils
 import org.checkerframework.javacutil.Pair
 import org.checkerframework.javacutil.TreeUtils
+import org.checkerframework.org.plumelib.util.WeakIdentityHashMap
 import java.util.*
 import javax.lang.model.element.AnnotationMirror
 import javax.lang.model.element.Element
@@ -35,7 +42,6 @@ class Analyzer(private val checker: MainChecker) {
 
   val utils get() = checker.utils
   val unknown = StoreInfo(this, MungoUnknownType.SINGLETON, Type.UnknownType())
-  val bottom = StoreInfo(this, MungoBottomType.SINGLETON, Type.noType)
 
   private val processingEnv = checker.processingEnvironment
   private val worklist = Worklist()
@@ -141,8 +147,8 @@ class Analyzer(private val checker: MainChecker) {
     return info ?: unknown
   }
 
-  fun getInferredInfo(node: Node): StoreInfo {
-    return nodeValues[node] ?: unknown
+  fun getInferredInfo(node: Node, default: StoreInfo = unknown): StoreInfo {
+    return nodeValues[node] ?: default
   }
 
   fun getRegularExitStore(tree: Tree): Store? {
@@ -196,18 +202,28 @@ class Analyzer(private val checker: MainChecker) {
   private val scanning = mutableMapOf<ClassTree, Int>()
 
   fun run(classTree: ClassTree) {
-    if (scanning.containsKey(classTree)) return
-    scanning[classTree] = 1
+    val classQueue: Queue<Pair<ClassTree, Store>> = ArrayDeque()
+    classQueue.add(Pair.of(classTree, Store.empty))
 
-    val graph = checker.utils.classUtils.visitClassSymbol((classTree as JCTree.JCClassDecl).sym)
-    val info = prepareClass(classTree)
-    run(classTree, info.static, null)
-    run(classTree, info.nonStatic, graph)
+    while (!classQueue.isEmpty()) {
+      val qel = classQueue.remove()
+      val ct = qel.first
 
-    scanning[classTree] = 2
+      if (scanning.containsKey(ct)) continue
+      scanning[ct] = 1
+
+      val graph = checker.utils.classUtils.visitClassSymbol((ct as JCTree.JCClassDecl).sym)
+      val info = prepareClass(ct)
+      run(classQueue, ct, info.static, null)
+      run(classQueue, ct, info.nonStatic, graph)
+
+      scanning[ct] = 2
+    }
   }
 
-  private fun run(classTree: JCTree.JCClassDecl, info: ClassInfo, graph: Graph?) {
+  private fun run(classQueue: Queue<Pair<ClassTree, Store>>, classTree: JCTree.JCClassDecl, info: ClassInfo, graph: Graph?) {
+    val lambdaQueue: Queue<Pair<LambdaExpressionTree, Store>> = ArrayDeque()
+
     // Static fields/initializers are executed when a class is first loaded in textual order
     // Instance fields/initializers are executed when an object is instantiated in textual order
 
@@ -220,6 +236,8 @@ class Analyzer(private val checker: MainChecker) {
       val initializer = field.initializer
       if (initializer != null) {
         currentStore = run(
+          classQueue,
+          lambdaQueue,
           CFGStatement(field, classTree),
           currentStore
         ).regularStore
@@ -234,6 +252,8 @@ class Analyzer(private val checker: MainChecker) {
     // Analyze blocks
     for (block in info.blocks) {
       currentStore = run(
+        classQueue,
+        lambdaQueue,
         CFGStatement(block, classTree),
         currentStore
       ).regularStore
@@ -253,10 +273,12 @@ class Analyzer(private val checker: MainChecker) {
     // Analyze constructors
     for (method in info.constructorMethods) {
       val result = run(
+        classQueue,
+        lambdaQueue,
         CFGMethod(method, classTree),
         currentStore
       )
-      exitConstructorsStore.merge(result.regularStore)
+      exitConstructorsStore.mergeFields(result.regularStore)
     }
 
     // The initial information for non public methods, is the worst case scenario: all the fields invalidated.
@@ -267,6 +289,8 @@ class Analyzer(private val checker: MainChecker) {
     // Analyze non public methods
     for (method in info.nonPublicMethods) {
       run(
+        classQueue,
+        lambdaQueue,
         CFGMethod(method, classTree),
         storeForNonPublicMethods
       )
@@ -276,13 +300,21 @@ class Analyzer(private val checker: MainChecker) {
 
     // Analyze public methods
     if (graph == null) {
-      analyzeClassWithoutProtocol(classTree, info.publicMethods, storeForPublicMethods)
+      analyzeClassWithoutProtocol(classQueue, lambdaQueue, classTree, info.publicMethods, storeForPublicMethods)
     } else {
-      analyzeClassWithProtocol(classTree, info.publicMethods, graph, storeForPublicMethods)
+      analyzeClassWithProtocol(classQueue, lambdaQueue, classTree, info.publicMethods, graph, storeForPublicMethods)
     }
 
-    // Analyze other classes
-    // TODO
+    // Analyze lambdas
+    while (!lambdaQueue.isEmpty()) {
+      val lambdaPair = lambdaQueue.poll()
+      run(
+        classQueue,
+        lambdaQueue,
+        CFGLambda(lambdaPair.first),
+        lambdaPair.second
+      )
+    }
   }
 
   private fun mergeTreeLookup(otherTreeLookup: IdentityHashMap<Tree, MutableSet<Node>>) {
@@ -296,12 +328,29 @@ class Analyzer(private val checker: MainChecker) {
     }
   }
 
+  private fun astToTree(ast: UnderlyingAST) = when (ast) {
+    is CFGMethod -> ast.method
+    is CFGLambda -> ast.code
+    is CFGStatement -> ast.code
+    else -> throw RuntimeException("unknown ast")
+  }
+
+  private val cfgCache = WeakIdentityHashMap<Tree, ControlFlowGraph>()
+
   private fun run(
+    classQueue: Queue<Pair<ClassTree, Store>>,
+    lambdaQueue: Queue<Pair<LambdaExpressionTree, Store>>,
     ast: UnderlyingAST,
     capturedStore: Store
   ): AnalyzerResult {
-    val cfg = CFCFGBuilder.build(root, ast, processingEnv)
-    mergeTreeLookup(cfg.treeLookup)
+    val tree = astToTree(ast)
+    val inCache = cfgCache[tree]
+    val cfg = if (inCache == null) {
+      val g = CFCFGBuilder.build(root, ast, processingEnv)
+      mergeTreeLookup(g.treeLookup)
+      cfgCache[tree] = g
+      g
+    } else inCache
 
     // Init
     val entry = cfg.entryBlock
@@ -318,28 +367,28 @@ class Analyzer(private val checker: MainChecker) {
     }
 
     // Store results
-    val code = when (ast) {
-      is CFGMethod -> ast.method
-      is CFGLambda -> ast.code
-      is CFGStatement -> ast.code
-      else -> throw RuntimeException("unknown ast")
-    }
-
     val exitResult = getResultExit(cfg)!!
-    resultsExit[code] = exitResult
-    returnStatementStores[code] = getReturnStatementStores(cfg)
+    resultsExit[tree] = exitResult
+    returnStatementStores[tree] = getReturnStatementStores(cfg)
 
     // Graphics
     /*if (checker.hasOption("flowdotdir") || checker.hasOption("cfgviz")) {
       handleCFGViz()
     }*/
 
-    // Queue classes and lambdas
-    for (cls in cfg.declaredClasses) {
-      // TODO add to queue
-    }
-    for (lambda in cfg.declaredLambdas) {
-      // TODO add to queue
+    // Only inner queue classes and lambdas once
+    if (inCache == null) {
+      // Queue classes
+      for (cls in cfg.declaredClasses) {
+        // TODO which store to use? getStoreBefore(cls)
+        classQueue.add(Pair.of(cls, Store.empty))
+      }
+
+      // Queue lambdas
+      for (lambda in cfg.declaredLambdas) {
+        // TODO which store to use? getStoreBefore(cls)
+        lambdaQueue.add(Pair.of(lambda, Store.empty))
+      }
     }
 
     return exitResult
@@ -580,6 +629,8 @@ class Analyzer(private val checker: MainChecker) {
   // Class analysis
 
   private fun analyzeClassWithProtocol(
+    classQueue: Queue<Pair<ClassTree, Store>>,
+    lambdaQueue: Queue<Pair<LambdaExpressionTree, Store>>,
     classTree: JCTree.JCClassDecl,
     publicMethods: List<MethodTree>,
     graph: Graph,
@@ -607,7 +658,7 @@ class Analyzer(private val checker: MainChecker) {
     // States that need recomputing. Use a LinkedHashSet to keep some order and avoid duplicates.
     val stateQueue = LinkedHashSet<State>()
 
-    val emptyStore = Store.empty
+    val emptyStore = initialStore.toMutable().toBottom().toImmutable()
 
     // Update the state's store. Queue the state again if it changed.
     fun mergeStateStore(state: State, store: Store) {
@@ -641,7 +692,7 @@ class Analyzer(private val checker: MainChecker) {
 
       for ((method, destState) in methodToStates) {
         val entryStore = mergeMethodStore(method, store) ?: continue
-        val result = run(CFGMethod(method, classTree), entryStore)
+        val result = run(classQueue, lambdaQueue, CFGMethod(method, classTree), entryStore)
         val constantReturn = getConstantReturn(returnStatementStores[method]!!.map { it.first })
 
         // Merge new exit store with the stores of each destination state
@@ -666,6 +717,8 @@ class Analyzer(private val checker: MainChecker) {
   }
 
   private fun analyzeClassWithoutProtocol(
+    classQueue: Queue<Pair<ClassTree, Store>>,
+    lambdaQueue: Queue<Pair<LambdaExpressionTree, Store>>,
     classTree: JCTree.JCClassDecl,
     publicMethods: List<MethodTree>,
     initialStore: Store
@@ -692,7 +745,7 @@ class Analyzer(private val checker: MainChecker) {
       val entryStore = globalStore
 
       for (method in publicMethods) {
-        val result = run(CFGMethod(method, classTree), entryStore)
+        val result = run(classQueue, lambdaQueue, CFGMethod(method, classTree), entryStore)
         // Merge new exit store with the global store
         updateGlobalStore(result.regularStore)
       }

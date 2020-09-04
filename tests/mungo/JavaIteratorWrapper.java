@@ -10,7 +10,7 @@ class JavaIteratorWrapper1 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
   }
@@ -56,7 +56,7 @@ class JavaIteratorWrapper3 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
   }
@@ -79,7 +79,7 @@ class JavaIteratorWrapper4_2 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
   }
@@ -106,7 +106,7 @@ class JavaIteratorWrapper4 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
   }
@@ -133,7 +133,7 @@ class JavaIteratorWrapper5 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
     // :: warning: (iterator: JavaIterator{HasNext|Next})
@@ -167,7 +167,7 @@ class JavaIteratorWrapper6 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
   }
@@ -196,7 +196,7 @@ class JavaIteratorWrapper7 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
   }
@@ -226,7 +226,7 @@ class JavaIteratorWrapper8 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
     // :: error: (Possible 'this' leak)
@@ -258,7 +258,7 @@ class JavaIteratorWrapper9 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
     // :: error: (Possible 'this' leak)
@@ -293,7 +293,7 @@ class JavaIteratorWrapper10 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
     Supplier<Object> fn = () -> {
@@ -321,7 +321,7 @@ class JavaIteratorWrapper11 {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
     Supplier<Object> fn = () -> {
@@ -349,7 +349,7 @@ class JavaIteratorWrapperPropagation {
   private @MungoNullable JavaIterator iterator = null;
 
   public void init(JavaIterator it) {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: Null)
     // :: warning: (it: JavaIterator{HasNext|Next})
     iterator = it;
   }

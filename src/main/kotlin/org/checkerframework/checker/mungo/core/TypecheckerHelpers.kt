@@ -103,7 +103,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
   }
 
   protected fun checkOwnCall(node: MethodInvocationTree, element: Symbol.MethodSymbol): Boolean {
-    if (TreeUtils.isSelfAccess(node) && !element.isStatic && !element.isStaticOrInstanceInit && !element.isPrivate) {
+    if (isSelfAccess(node) && !element.isStatic && !element.isStaticOrInstanceInit && !element.isPrivate) {
       val hasProtocol = utils.classUtils.visitClassSymbol(element.enclosingElement) != null
       if (hasProtocol) {
         utils.err("Cannot call its own public method", node)

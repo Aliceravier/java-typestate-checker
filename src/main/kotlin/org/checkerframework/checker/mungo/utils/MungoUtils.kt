@@ -7,6 +7,7 @@ import com.sun.source.util.TreePath
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Symtab
 import com.sun.tools.javac.code.Type
+import com.sun.tools.javac.code.TypeTag
 import com.sun.tools.javac.file.JavacFileManager
 import com.sun.tools.javac.processing.JavacProcessingEnvironment
 import com.sun.tools.javac.util.JCDiagnostic
@@ -124,9 +125,22 @@ class MungoUtils(val checker: SourceChecker) {
     }
   }
 
+  fun leastUpperBound(a: TypeMirror, b: TypeMirror): TypeMirror {
+    // Avoid assertion error in com.sun.tools.javac.code.Types$SameTypeVisitor.visitType(Types.java:1064)
+    if ((a as Type).tag == TypeTag.UNKNOWN) return a
+    if ((b as Type).tag == TypeTag.UNKNOWN) return b
+    return TypesUtils.leastUpperBound(a, b, env)
+  }
+
+  fun isSameType(a: TypeMirror?, b: TypeMirror?): Boolean {
+    return isSameType(a as Type?, b as Type?)
+  }
+
   fun isSameType(a: Type?, b: Type?): Boolean {
     if (a == null) return b == null
     if (b == null) return false
+    if (a.tag == TypeTag.UNKNOWN) return b.tag == TypeTag.UNKNOWN
+    if (b.tag == TypeTag.UNKNOWN) return a.tag == TypeTag.UNKNOWN
     // isSameType for methods does not take thrown exceptions into account
     return typeUtils.isSameType(a, b) && isSameTypes(a.thrownTypes, b.thrownTypes)
   }

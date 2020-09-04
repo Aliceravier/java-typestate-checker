@@ -20,7 +20,7 @@ class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: Type
     if (this === other) return true
     if (other !is StoreInfo) return false
     if (mungoType != other.mungoType) return false
-    return (type === other.type || analyzer.utils.typeUtils.isSameType(type, other.type))
+    return (type === other.type || analyzer.utils.isSameType(type, other.type))
   }
 
   override fun hashCode(): Int {
@@ -36,7 +36,7 @@ class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: Type
       return StoreInfo(
         a.analyzer,
         a.mungoType.leastUpperBound(b.mungoType),
-        TypesUtils.leastUpperBound(a.type, b.type, a.analyzer.utils.env)
+        a.analyzer.utils.leastUpperBound(a.type, b.type)
       )
     }
 
@@ -143,6 +143,15 @@ class MutableStore(private val map: MutableMap<Reference, StoreInfo> = mutableMa
     return this
   }
 
+  fun mergeFields(other: Store): MutableStore {
+    for ((ref, info) in other) {
+      if (ref.isThisField()) {
+        _merge(ref, info)
+      }
+    }
+    return this
+  }
+
   fun intersect(ref: Reference, info: StoreInfo) {
     canMutate()
     map.compute(ref) { _, curr -> if (curr == null) info else StoreInfo.intersect(curr, info) }
@@ -153,9 +162,12 @@ class MutableStore(private val map: MutableMap<Reference, StoreInfo> = mutableMa
     return map.remove(ref)
   }
 
-  fun toBottom() {
+  fun toBottom(): MutableStore {
     canMutate()
-    map.clear()
+    for ((key, value) in map) {
+      map[key] = StoreInfo(value, MungoBottomType.SINGLETON)
+    }
+    return this
   }
 
   fun invalidate(utils: MungoUtils): MutableStore {

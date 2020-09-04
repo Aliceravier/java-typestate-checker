@@ -328,10 +328,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     val element = TreeUtils.elementFromTree(node) ?: return p
 
     // Check this field access if this is not a self access, or static access, or method call
-    if (!(TreeUtils.isExplicitThisDereference(node)
-        || TreeUtils.isSelfAccess(node)
-        || node.expression.kind == Tree.Kind.PARAMETERIZED_TYPE
-        || ElementUtils.isStatic(element))) {
+    if (!(TreeUtils.isExplicitThisDereference(node) || isSelfAccess(node) || ElementUtils.isStatic(element))) {
       val parent = currentPath.parentPath.leaf
       if (!(parent is MethodInvocationTree && parent.methodSelect === node)) {
         val typeInfo = analyzer.getInferredType(node.expression)

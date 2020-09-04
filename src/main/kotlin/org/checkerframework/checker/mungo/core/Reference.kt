@@ -111,7 +111,7 @@ class FieldAccess(val receiver: Reference, type: TypeMirror, val field: Variable
   val isNonPrivate = !field.modifiers.contains(Modifier.PRIVATE)
 
   override fun isThisField(): Boolean {
-    return receiver.isThisField()
+    return if (receiver is ThisReference) true else receiver.isThisField()
   }
 
   override fun equals(other: Any?): Boolean {
@@ -132,7 +132,7 @@ class FieldAccess(val receiver: Reference, type: TypeMirror, val field: Variable
 
 class ThisReference(type: TypeMirror) : Reference(type) {
   override fun isThisField(): Boolean {
-    return true
+    return false
   }
 
   override fun equals(other: Any?): Boolean {

@@ -51,9 +51,8 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
     return store.toImmutable()
   }
 
-  private fun getCurrentInfo(res: MutableAnalyzerResultWithValue, node: Node): StoreInfo? {
-    // TODO what todo when there is no info? Is it unknown? Bottom?
-    return getReference(node)?.let { res.getInfo(it) }
+  private fun getCurrentInfo(res: MutableAnalyzerResultWithValue, node: Node, default: StoreInfo): StoreInfo {
+    return getReference(node)?.let { res.getInfo(it) } ?: analyzer.getInferredInfo(node, default)
   }
 
   private fun setCurrentInfo(res: MutableAnalyzerResultWithValue, node: Node, info: StoreInfo) {
@@ -102,7 +101,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }*/
 
   override fun visitThisLiteral(n: ThisLiteralNode, res: MutableAnalyzerResultWithValue): Void? {
-    getCurrentInfo(res, n)?.let { res.value = it }
+    getCurrentInfo(res, n, res.value).let { res.value = it }
     return null
   }
 
@@ -166,18 +165,15 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
     val thenStore = result.thenStore
     val elseStore = result.elseStore
 
-    if (firstValue != null) {
-      // Only need to insert if the second value is actually different.
-      if (firstValue != secondValue) {
-        val secondParts = splitAssignments(secondNode)
-        for (secondPart in secondParts) {
-          val secondInternal = getReference(secondPart)
-          if (secondInternal != null) {
-            if (notEqualTo) {
-              elseStore[secondInternal] = firstValue
-            } else {
-              thenStore[secondInternal] = firstValue
-            }
+    if (firstValue != secondValue) {
+      val secondParts = splitAssignments(secondNode)
+      for (secondPart in secondParts) {
+        val secondInternal = getReference(secondPart)
+        if (secondInternal != null) {
+          if (notEqualTo) {
+            elseStore[secondInternal] = firstValue
+          } else {
+            thenStore[secondInternal] = firstValue
           }
         }
       }
@@ -238,7 +234,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
       node = node.operand
     }
     if (node is LocalVariableNode || node is FieldAccessNode) {
-      val value = getCurrentInfo(result, node) ?: return
+      val value = getCurrentInfo(result, node, analyzer.unknown)
       val type = value.mungoType
       if (!type.isSubtype(MungoTypecheck.noProtocolOrMoved)) {
         setCurrentInfo(result, node, StoreInfo(value, MungoMovedType.SINGLETON))
@@ -321,7 +317,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
       node = node.operand
     }
     if (node is LocalVariableNode || node is FieldAccessNode) {
-      val value = getCurrentInfo(result, node) ?: return
+      val value = getCurrentInfo(result, node, analyzer.unknown)
       val newValue = StoreInfo(value, newType)
       setCurrentInfo(result, node, newValue)
     }
@@ -330,7 +326,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   override fun visitCase(n: CaseNode, result: MutableAnalyzerResultWithValue): Void? {
     val caseValue = analyzer.getInferredInfo(n.caseOperand)
     val assign = n.switchOperand as AssignmentNode
-    val switchValue = getCurrentInfo(result, assign.target) ?: return null
+    val switchValue = getCurrentInfo(result, assign.target, analyzer.unknown)
     strengthenAnnotationOfEqualTo(
       result,
       n.caseOperand,
@@ -352,8 +348,8 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
 
   // Adapted from NullnessTransfer#visitInstanceOf
   override fun visitInstanceOf(n: InstanceOfNode, result: MutableAnalyzerResultWithValue): Void? {
-    val prevValue = getCurrentInfo(result, n.operand) ?: return null
     val internal = getReference(n.operand) ?: return null
+    val prevValue = getCurrentInfo(result, n.operand, analyzer.unknown)
     val thenStore = result.thenStore
     thenStore[internal] = StoreInfo(prevValue, MungoTypecheck.refineToNonNull(prevValue.mungoType))
     return null
@@ -383,7 +379,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   override fun visitLocalVariable(n: LocalVariableNode, result: MutableAnalyzerResultWithValue): Void? {
-    val value = getCurrentInfo(result, n) ?: return null
+    val value = getCurrentInfo(result, n, result.value)
     if (wasMovedToClosure(n)) {
       // We will error when it detects a moved variable
       // So refine to bottom to avoid duplicate errors
@@ -402,7 +398,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
   }
 
   override fun visitFieldAccess(n: FieldAccessNode, result: MutableAnalyzerResultWithValue): Void? {
-    val value = getCurrentInfo(result, n) ?: return null
+    val value = getCurrentInfo(result, n, result.value)
     // Prefer the inferred type information
     result.value = value
 
