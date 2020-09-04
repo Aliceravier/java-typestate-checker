@@ -74,8 +74,7 @@ fun isLastArgumentArrayMatchingVararg(varargs: Type.ArrayType, parameters: List<
 }
 
 // Adapted from AnnotatedTypes.expandVarArgs
-fun expandVarArgs(method: ExecutableElement, args: List<ExpressionTree>): List<TypeMirror> {
-  var parameters = method.parameters.map { it.asType() }
+fun expandVarArgs(method: ExecutableElement, parameters: List<TypeMirror>, args: List<ExpressionTree>): List<TypeMirror> {
   if (!method.isVarArgs) {
     return parameters
   }
@@ -83,11 +82,11 @@ fun expandVarArgs(method: ExecutableElement, args: List<ExpressionTree>): List<T
   if (isLastArgumentArrayMatchingVararg(varargs, parameters, args)) {
     return parameters
   }
-  parameters = ArrayList(parameters.subList(0, parameters.size - 1))
+  val newParameters = ArrayList(parameters.subList(0, parameters.size - 1))
   for (i in args.size - parameters.size downTo 1) {
-    parameters.add(varargs.componentType)
+    newParameters.add(varargs.componentType)
   }
-  return parameters
+  return newParameters
 }
 
 fun upperBound(type: TypeMirror): TypeMirror {

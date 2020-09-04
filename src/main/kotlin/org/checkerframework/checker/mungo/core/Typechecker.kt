@@ -4,8 +4,10 @@ import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Type
 import org.checkerframework.checker.mungo.MainChecker
-import org.checkerframework.checker.mungo.typecheck.*
+import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
 import org.checkerframework.checker.mungo.utils.MungoUtils
+import org.checkerframework.framework.type.AnnotatedTypeMirror
+import org.checkerframework.framework.type.AnnotatedTypeMirror.AnnotatedExecutableType
 import org.checkerframework.javacutil.AnnotationUtils
 import org.checkerframework.javacutil.ElementUtils
 import org.checkerframework.javacutil.TreeUtils
@@ -48,6 +50,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
   }
 
   override fun visitClass(classTree: ClassTree, p: Void?): Void? {
+    utils.factory.setRoot(root)
     analyzer.setRoot(root)
     analyzer.run(classTree)
 
@@ -148,7 +151,11 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     // r is a subtype of m receiver type;
     // if m is generic, passed type arguments are subtypes of m type variables
 
-    val expectedParams = expandVarArgs(element, node.arguments)
+    val mType = utils.factory.methodFromUse(node)
+    val invokedMethod = mType.executableType
+    // val typeargs = mType.typeArgs
+
+    val expectedParams = expandVarArgs(element, invokedMethod.parameterTypes.map { it.underlyingType }, node.arguments)
 
     for (i in expectedParams.indices) {
       commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")
@@ -175,7 +182,11 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     // passed arguments are subtypes of corresponding c parameters
     // if c is generic, passed type arguments are subtypes of c type variables
 
-    val expectedParams = expandVarArgs(element, node.arguments)
+    val mType = utils.factory.constructorFromUse(node)
+    val invokedMethod = mType.executableType
+    // val typeargs = mType.typeArgs
+
+    val expectedParams = expandVarArgs(element, invokedMethod.parameterTypes.map { it.underlyingType }, node.arguments)
 
     for (i in expectedParams.indices) {
       commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")

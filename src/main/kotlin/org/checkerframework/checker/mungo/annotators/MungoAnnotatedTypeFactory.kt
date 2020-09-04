@@ -47,7 +47,7 @@ class MungoAnnotatedTypeFactory(checker: MungoChecker) : GenericAnnotatedTypeFac
 
   override fun postInit() {
     super.postInit()
-    c.utils.setFactory(this)
+    // TODO c.utils.setFactory(this)
 
     // Transform the @MungoRequires annotations for the proper @MungoInternalInfo ones
     val types = typesFromStubFilesField.get(stubTypes) as MutableMap<*, *>

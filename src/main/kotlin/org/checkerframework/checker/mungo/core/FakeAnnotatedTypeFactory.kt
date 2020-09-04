@@ -28,7 +28,7 @@ private class FakeBasicTypeChecker(myChecker: SourceChecker) : BaseTypeChecker()
   }
 }
 
-private class FakeAnnotatedTypeFactory(myChecker: SourceChecker) : AnnotatedTypeFactory(FakeBasicTypeChecker(myChecker)) {
+class FakeAnnotatedTypeFactory(myChecker: SourceChecker) : AnnotatedTypeFactory(FakeBasicTypeChecker(myChecker)) {
 
   private val typesFromStubFilesField = StubTypes::class.java.getDeclaredField("typesFromStubFiles")
   private val typesFromStubFiles = mutableMapOf<Element, AnnotatedTypeMirror>()
@@ -94,14 +94,4 @@ private class FakeAnnotatedTypeFactory(myChecker: SourceChecker) : AnnotatedType
     return true
   }
 
-}
-
-class StubFilesProcessor(private val checker: SourceChecker) {
-  private lateinit var fakeFactory: FakeAnnotatedTypeFactory
-
-  fun init() {
-    fakeFactory = FakeAnnotatedTypeFactory(checker)
-  }
-
-  fun getTypeFromStub(elt: Element) = fakeFactory.getTypeFromStub(elt)
 }

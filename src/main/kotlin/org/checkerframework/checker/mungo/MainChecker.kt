@@ -23,7 +23,7 @@ class MainChecker : SourceChecker() {
   override fun initChecker() {
     super.initChecker()
     val utils = MungoUtils(this)
-    utils.stubFilesProcessor.init()
+    utils.initFactory()
     this.utils = utils
   }
 

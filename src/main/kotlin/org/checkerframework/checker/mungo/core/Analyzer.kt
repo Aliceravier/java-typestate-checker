@@ -31,7 +31,6 @@ import org.checkerframework.javacutil.Pair
 import org.checkerframework.javacutil.TreeUtils
 import org.checkerframework.org.plumelib.util.WeakIdentityHashMap
 import java.util.*
-import javax.lang.model.element.AnnotationMirror
 import javax.lang.model.element.Element
 import javax.lang.model.element.ElementKind
 import javax.lang.model.element.ExecutableElement
@@ -66,52 +65,51 @@ class Analyzer(private val checker: MainChecker) {
     visitor.setRoot(root)
   }
 
-  private fun getInvalidatedType(type: TypeMirror): MungoType {
-    return MungoTypecheck.invalidate(checker.utils, type)
-  }
+  private fun getInvalidatedType(type: TypeMirror) = MungoTypecheck.invalidate(checker.utils, type)
 
-  private fun getDeclaredType(type: TypeMirror): MungoType {
-    return MungoTypecheck.typeDeclaration(checker.utils, type)
-  }
-
-  private fun getDeclaredType(type: TypeMirror, annotations: Collection<AnnotationMirror>): MungoType {
-    return MungoTypecheck.typeDeclaration(checker.utils, type, annotations)
-  }
-
-  private fun getDeclaredType(element: Element?, type: TypeMirror): MungoType {
+  private fun getInitialType(tree: Tree, type: TypeMirror): MungoType {
+    val element = TreeUtils.elementFromTree(tree)
     // If it is a local variable...
     if (element?.kind == ElementKind.LOCAL_VARIABLE) {
       // Annotations do not seem to be attached to the TypeMirror... so get them from the declaration...
       val decl = TreeInfo.declarationFor(element as Symbol.VarSymbol, root) as? VariableTree?
-      return if (decl == null) getDeclaredType(type) else getDeclaredType(treeToType(decl))
+      return if (decl == null)
+        MungoTypecheck.typeLocalDeclaration(checker.utils, type)
+      else
+        MungoTypecheck.typeLocalDeclaration(checker.utils, treeToType(decl))
     }
     // If it is a parameter...
     if (element?.kind == ElementKind.PARAMETER) {
-      val annotated = utils.stubFilesProcessor.getTypeFromStub(element)
+      if (tree !is VariableTree) {
+        // The tree refers to a parameter, but from inside the function.
+        // Treat it like a local variable.
+        return MungoTypecheck.typeLocalDeclaration(checker.utils, type)
+      }
+      val annotated = utils.getTypeFromStub(element)
       if (annotated is AnnotatedTypeMirror.AnnotatedDeclaredType) {
         if (annotated.annotations.any { MungoUtils.isMungoLibAnnotation(it) }) {
-          return getDeclaredType(type, annotated.annotations)
+          return MungoTypecheck.typeDeclaration(checker.utils, type, annotated.annotations)
         }
       }
-      return getDeclaredType(type)
+      return MungoTypecheck.typeDeclaration(checker.utils, type)
     }
     // If the return type has annotations or we are sure we have access to the method's code...
     if (element is ExecutableElement) {
-      val annotated = utils.stubFilesProcessor.getTypeFromStub(element)
+      val annotated = utils.getTypeFromStub(element)
       if (annotated is AnnotatedTypeMirror.AnnotatedExecutableType) {
         if (annotated.returnType.annotations.any { MungoUtils.isMungoLibAnnotation(it) }) {
-          return getDeclaredType(type, annotated.returnType.annotations)
+          return MungoTypecheck.typeDeclaration(checker.utils, type, annotated.returnType.annotations)
         }
       }
       if (!ElementUtils.isElementFromByteCode(element)) {
-        return getDeclaredType(type)
+        return MungoTypecheck.typeDeclaration(checker.utils, type)
       }
     }
     return getInvalidatedType(type)
   }
 
   fun getInitialInfo(tree: Tree, type: TypeMirror = treeToType(tree)): StoreInfo {
-    return StoreInfo(this, getDeclaredType(TreeUtils.elementFromTree(tree), type), type)
+    return StoreInfo(this, getInitialType(tree, type), type)
   }
 
   private fun getInitialInfo(node: Node): StoreInfo {
@@ -121,7 +119,7 @@ class Analyzer(private val checker: MainChecker) {
 
   fun getInitialInfo(type: TypeMirror, refine: Boolean = false): StoreInfo {
     return StoreInfo(this, if (refine) {
-      getDeclaredType(type)
+      MungoTypecheck.typeDeclaration(checker.utils, type)
     } else {
       getInvalidatedType(type)
     }, type)

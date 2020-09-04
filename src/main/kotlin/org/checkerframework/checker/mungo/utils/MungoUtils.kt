@@ -12,8 +12,7 @@ import com.sun.tools.javac.file.JavacFileManager
 import com.sun.tools.javac.processing.JavacProcessingEnvironment
 import com.sun.tools.javac.util.JCDiagnostic
 import com.sun.tools.javac.util.Log
-import org.checkerframework.checker.mungo.annotators.MungoAnnotatedTypeFactory
-import org.checkerframework.checker.mungo.core.StubFilesProcessor
+import org.checkerframework.checker.mungo.core.FakeAnnotatedTypeFactory
 import org.checkerframework.checker.mungo.lib.*
 import org.checkerframework.checker.mungo.qualifiers.MungoBottom
 import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo
@@ -63,14 +62,13 @@ class MungoUtils(val checker: SourceChecker) {
   val processor = TypestateProcessor(this)
   val methodUtils = MethodUtils(this)
 
-  val stubFilesProcessor = StubFilesProcessor(checker)
+  lateinit var factory: FakeAnnotatedTypeFactory
 
-  private var _factory: MungoAnnotatedTypeFactory? = null
-  val factory get() = _factory ?: throw AssertionError("no factory")
-
-  fun setFactory(f: MungoAnnotatedTypeFactory) {
-    _factory = f
+  fun initFactory() {
+    factory = FakeAnnotatedTypeFactory(checker)
   }
+
+  fun getTypeFromStub(elt: Element) = factory.getTypeFromStub(elt)
 
   // Adapted from SourceChecker#report and JavacTrees#printMessage
   private fun reportError(file: Path, pos: Int, messageKey: String, vararg args: Any?) {
@@ -158,8 +156,6 @@ class MungoUtils(val checker: SourceChecker) {
     }
     return true
   }
-
-  fun getPath(tree: Tree): TreePath? = treeUtils.getPath(factory.getCurrentRoot(), tree)
 
   fun getPath(tree: Tree, root: CompilationUnitTree): TreePath? = treeUtils.getPath(root, tree)
 

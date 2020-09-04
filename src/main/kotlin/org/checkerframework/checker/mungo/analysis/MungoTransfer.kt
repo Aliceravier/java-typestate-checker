@@ -297,10 +297,8 @@ class MungoTransfer(checker: MungoChecker, analysis: MungoAnalysis) : CFAbstract
   }
 
   private fun wasMovedToClosure(n: LocalVariableNode): Boolean {
-    val tree = n.tree as? IdentifierTree ?: return false
-    val path = utils.getPath(tree) ?: return false
-    val element = TreeUtils.elementFromTree(tree) as? Symbol.VarSymbol ?: return false
-    return utils.wasMovedToDiffClosure(path, tree, element)
+    // TODO this file will be removed anyway
+    return false
   }
 
   override fun visitLocalVariable(n: LocalVariableNode, input: TransferInput<MungoValue, MungoStore>): TransferResult<MungoValue, MungoStore> {

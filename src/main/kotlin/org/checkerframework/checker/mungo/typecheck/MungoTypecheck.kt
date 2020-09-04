@@ -301,6 +301,33 @@ object MungoTypecheck {
     return MungoUnionType.create(listOf(mungoType, maybeNullableType))
   }
 
+  // Like typeDeclaration(), but only cares about @Nullable annotations
+  fun typeLocalDeclaration(utils: MungoUtils, type: TypeMirror, annotations: Collection<AnnotationMirror> = type.annotationMirrors): MungoType {
+    when {
+      type.kind.isPrimitive -> return MungoPrimitiveType.SINGLETON
+      type.kind == TypeKind.VOID -> return MungoPrimitiveType.SINGLETON
+      type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
+      type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
+    }
+
+    val isNullable = annotations.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
+    val mungoType = if (ClassUtils.isJavaLangObject(type)) {
+      MungoObjectType.SINGLETON
+    } else {
+      val graph = utils.classUtils.visitClassTypeMirror(type)
+      if (graph == null) {
+        MungoNoProtocolType.SINGLETON
+      } else {
+        val states = graph.getAllConcreteStates()
+        MungoUnionType.create(states.map { MungoStateType.create(graph, it) })
+      }
+    }
+
+    val maybeNullableType = if (isNullable) MungoNullType.SINGLETON else MungoBottomType.SINGLETON
+
+    return MungoUnionType.create(listOf(mungoType, maybeNullableType))
+  }
+
   fun objectCreation(utils: MungoUtils, type: TypeMirror): MungoType {
     return if (ClassUtils.isJavaLangObject(type)) {
       MungoObjectType.SINGLETON
