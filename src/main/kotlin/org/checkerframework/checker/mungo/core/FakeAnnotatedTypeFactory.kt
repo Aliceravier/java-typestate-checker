@@ -1,26 +1,21 @@
 package org.checkerframework.checker.mungo.core
 
-import com.sun.source.util.TreePath
+import com.sun.source.tree.Tree
 import org.checkerframework.checker.mungo.qualifiers.MungoBottom
 import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo
 import org.checkerframework.checker.mungo.qualifiers.MungoUnknown
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
-import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.common.basetype.BaseTypeChecker
 import org.checkerframework.framework.source.SourceChecker
 import org.checkerframework.framework.stub.StubTypes
 import org.checkerframework.framework.type.AnnotatedTypeFactory
 import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.framework.type.QualifierHierarchy
-import org.checkerframework.framework.util.CFContext
 import org.checkerframework.framework.util.GraphQualifierHierarchy
 import org.checkerframework.framework.util.MultiGraphQualifierHierarchy
-import org.checkerframework.javacutil.BugInCF
-import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.AnnotationMirror
 import javax.lang.model.element.Element
-import javax.lang.model.element.TypeElement
 
 private class FakeBasicTypeChecker(myChecker: SourceChecker) : BaseTypeChecker() {
   init {
@@ -92,6 +87,23 @@ class FakeAnnotatedTypeFactory(myChecker: SourceChecker) : AnnotatedTypeFactory(
 
   override fun shouldWarnIfStubRedundantWithBytecode(): Boolean {
     return true
+  }
+
+  private lateinit var analyzer: Analyzer
+
+  fun setAnalyzer(analyzer: Analyzer) {
+    this.analyzer = analyzer
+  }
+
+  override fun getAnnotatedType(tree: Tree): AnnotatedTypeMirror {
+    val type = super.getAnnotatedType(tree)
+    val info = analyzer.getInferredInfoOptional(tree)
+    if (info != null) {
+      if (info.type is AnnotatedTypeMirror.AnnotatedDeclaredType) {
+        return info.type
+      }
+    }
+    return type
   }
 
 }

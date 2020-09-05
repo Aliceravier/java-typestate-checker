@@ -26,6 +26,7 @@ import org.checkerframework.checker.mungo.typestate.graph.Graph
 import org.checkerframework.framework.source.SourceChecker
 import org.checkerframework.framework.stub.StubTypes
 import org.checkerframework.framework.type.AnnotatedTypeFactory
+import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.javacutil.*
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -123,6 +124,8 @@ class MungoUtils(val checker: SourceChecker) {
     }
   }
 
+  fun createType(type: TypeMirror, isDeclaration: Boolean = false) = AnnotatedTypeMirror.createType(type, factory, isDeclaration)
+
   fun leastUpperBound(a: TypeMirror, b: TypeMirror): TypeMirror {
     // Avoid assertion error in com.sun.tools.javac.code.Types$SameTypeVisitor.visitType(Types.java:1064)
     if ((a as Type).tag == TypeTag.UNKNOWN) return a
@@ -130,8 +133,18 @@ class MungoUtils(val checker: SourceChecker) {
     return TypesUtils.leastUpperBound(a, b, env)
   }
 
+  fun mostSpecific(a: TypeMirror, b: TypeMirror): TypeMirror {
+    return when {
+      typeUtils.isAssignable(a, b) -> a
+      typeUtils.isAssignable(b, a) -> b
+      TypesUtils.isErasedSubtype(a, b, typeUtils) -> a
+      TypesUtils.isErasedSubtype(b, a, typeUtils) -> b
+      else -> a
+    }
+  }
+
   fun isSameType(a: TypeMirror?, b: TypeMirror?): Boolean {
-    return isSameType(a as Type?, b as Type?)
+    return a === b || isSameType(a as Type?, b as Type?)
   }
 
   fun isSameType(a: Type?, b: Type?): Boolean {

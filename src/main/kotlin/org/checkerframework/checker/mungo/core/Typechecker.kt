@@ -104,9 +104,9 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     val iterableType = utils.factory.getAnnotatedType(node.expression)
     val iteratedType = AnnotatedTypes.getIteratedType(checker.processingEnvironment, utils.factory, iterableType)
     commonAssignmentCheck(
-      variable.underlyingType,
+      variable,
       node.variable,
-      iteratedType.underlyingType,
+      iteratedType,
       node.expression,
       "enhancedfor.type.incompatible"
     )
@@ -161,7 +161,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     val invokedMethod = mType.executableType
     // val typeargs = mType.typeArgs
 
-    val expectedParams = expandVarArgs(element, invokedMethod.parameterTypes.map { it.underlyingType }, node.arguments)
+    val expectedParams = AnnotatedTypes.expandVarArgs(utils.factory, invokedMethod, node.arguments)
 
     for (i in expectedParams.indices) {
       commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")
@@ -192,7 +192,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     val invokedMethod = mType.executableType
     // val typeargs = mType.typeArgs
 
-    val expectedParams = expandVarArgs(element, invokedMethod.parameterTypes.map { it.underlyingType }, node.arguments)
+    val expectedParams = AnnotatedTypes.expandVarArgs(utils.factory, invokedMethod, node.arguments)
 
     for (i in expectedParams.indices) {
       commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")
@@ -214,24 +214,23 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
   override fun visitLambdaExpression(node: LambdaExpressionTree, p: Void?): Void? {
     analyzer.getRegularExitStore(node.body)?.let { ensureLocalCompleteness(node.parameters, it) }
 
-    val fnElement = TreeUtils.findFunction(node, checker.processingEnvironment)
-    val fnType = fnElement.asType()
+    val functionType = utils.factory.getFunctionTypeFromTree(node)
 
     if (node.body.kind != Tree.Kind.BLOCK) {
       // Check return type for single statement returns here.
-      val ret = fnType.returnType
+      val ret = functionType.returnType
       if (ret.kind != TypeKind.VOID) {
         commonAssignmentCheckReturn(ret, node.body)
       }
     }
 
     // Check parameters
-    for (i in fnType.parameterTypes.indices) {
-      val lambdaParam = treeToType(node.parameters[i])
+    for (i in functionType.parameterTypes.indices) {
+      val lambdaParam = utils.factory.getAnnotatedType(node.parameters[i])
       commonAssignmentCheck(
         lambdaParam,
         null,
-        fnType.parameterTypes[i],
+        functionType.parameterTypes[i],
         node.parameters[i],
         "lambda.param.type.incompatible"
       )
@@ -256,9 +255,9 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
     }
     val enclosing = TreeUtils.enclosingOfKind(currentPath, HashSet(listOf(Tree.Kind.METHOD, Tree.Kind.LAMBDA_EXPRESSION)))!!
     val ret = if (enclosing is MethodTree) {
-      TreeUtils.elementFromDeclaration(enclosing).returnType
+      utils.factory.getMethodReturnType(enclosing, node)
     } else {
-      TreeUtils.findFunction(enclosing, checker.processingEnvironment).asType().returnType
+      utils.factory.getFunctionTypeFromTree(enclosing as LambdaExpressionTree).returnType
     }
     if (ret != null) {
       commonAssignmentCheckReturn(ret, node.expression)
@@ -274,8 +273,8 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
       || nodeKind == Tree.Kind.PREFIX_INCREMENT
       || nodeKind == Tree.Kind.POSTFIX_DECREMENT
       || nodeKind == Tree.Kind.POSTFIX_INCREMENT) {
-      val varType = treeToType(node.expression)
-      val valueType = treeToType(node)
+      val varType = utils.factory.getAnnotatedType(node.expression)
+      val valueType = utils.factory.getAnnotatedType(node)
       val errorKey = if (nodeKind == Tree.Kind.PREFIX_INCREMENT || nodeKind == Tree.Kind.POSTFIX_INCREMENT)
         "unary.increment.type.incompatible" else
         "unary.decrement.type.incompatible"
@@ -300,7 +299,7 @@ class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
   }
 
   override fun visitNewArray(node: NewArrayTree, p: Void?): Void? {
-    val arrayType = treeToType(node) as Type.ArrayType
+    val arrayType = utils.factory.getAnnotatedType(node)
     if (node.initializers != null) {
       for (init in node.initializers) {
         commonAssignmentCheckParameter(arrayType.componentType, init, "array.initializer.type.incompatible")

@@ -99,8 +99,8 @@ sealed class Reference(val type: TypeMirror) {
 }
 
 fun createFieldAccess(tree: VariableTree, classTree: ClassTree): FieldAccess {
-  val receiverType = treeToType(classTree)
-  val type = treeToType(tree)
+  val receiverType = TreeUtils.elementFromDeclaration(classTree).asType()
+  val type = TreeUtils.elementFromDeclaration(tree).asType()
   val element = TreeUtils.elementFromTree(tree) as VariableElement
   return FieldAccess(ThisReference(receiverType), type, element)
 }

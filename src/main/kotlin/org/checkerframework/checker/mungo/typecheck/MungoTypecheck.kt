@@ -4,6 +4,7 @@ import com.sun.source.tree.MemberSelectTree
 import com.sun.source.tree.MethodInvocationTree
 import com.sun.source.util.TreePath
 import com.sun.tools.javac.code.Symbol
+import com.sun.tools.javac.code.Type
 import org.checkerframework.checker.mungo.typestate.graph.DecisionState
 import org.checkerframework.checker.mungo.typestate.graph.State
 import org.checkerframework.checker.mungo.utils.ClassUtils
@@ -244,6 +245,10 @@ object MungoTypecheck {
       type.kind == TypeKind.VOID -> return MungoPrimitiveType.SINGLETON
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
+      type is Type.TypeVar ->
+        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON, MungoMovedType.SINGLETON))
+      type is Type.WildcardType ->
+        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON, MungoMovedType.SINGLETON))
     }
 
     val isNullable = type.annotationMirrors.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
@@ -271,6 +276,10 @@ object MungoTypecheck {
       type.kind == TypeKind.VOID -> return MungoPrimitiveType.SINGLETON
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
+      type is Type.TypeVar ->
+        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
+      type is Type.WildcardType ->
+        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
     }
 
     val isNullable = annotations.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
@@ -308,6 +317,10 @@ object MungoTypecheck {
       type.kind == TypeKind.VOID -> return MungoPrimitiveType.SINGLETON
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
+      type is Type.TypeVar ->
+        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
+      type is Type.WildcardType ->
+        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
     }
 
     val isNullable = annotations.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }

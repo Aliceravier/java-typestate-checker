@@ -20,10 +20,7 @@ import org.checkerframework.dataflow.cfg.ControlFlowGraph
 import org.checkerframework.dataflow.cfg.UnderlyingAST
 import org.checkerframework.dataflow.cfg.UnderlyingAST.*
 import org.checkerframework.dataflow.cfg.block.*
-import org.checkerframework.dataflow.cfg.node.BooleanLiteralNode
-import org.checkerframework.dataflow.cfg.node.ConditionalNotNode
-import org.checkerframework.dataflow.cfg.node.Node
-import org.checkerframework.dataflow.cfg.node.ReturnNode
+import org.checkerframework.dataflow.cfg.node.*
 import org.checkerframework.framework.flow.CFCFGBuilder
 import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.javacutil.ElementUtils
@@ -31,7 +28,6 @@ import org.checkerframework.javacutil.Pair
 import org.checkerframework.javacutil.TreeUtils
 import org.checkerframework.org.plumelib.util.WeakIdentityHashMap
 import java.util.*
-import javax.lang.model.element.Element
 import javax.lang.model.element.ElementKind
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.type.TypeMirror
@@ -40,7 +36,7 @@ import org.checkerframework.dataflow.analysis.Store.Kind as StoreKind
 class Analyzer(private val checker: MainChecker) {
 
   val utils get() = checker.utils
-  val unknown = StoreInfo(this, MungoUnknownType.SINGLETON, Type.UnknownType())
+  lateinit var unknown: StoreInfo
 
   private val processingEnv = checker.processingEnvironment
   private val worklist = Worklist()
@@ -63,9 +59,18 @@ class Analyzer(private val checker: MainChecker) {
   fun setRoot(root: CompilationUnitTree) {
     this.root = root as JCTree.JCCompilationUnit
     visitor.setRoot(root)
+
+    if (!this::unknown.isInitialized) {
+      unknown = StoreInfo(this, MungoUnknownType.SINGLETON, AnnotatedTypeMirror.createType(Type.noType, utils.factory, false))
+    }
+
+    utils.factory.setAnalyzer(this)
   }
 
   private fun getInvalidatedType(type: TypeMirror) = MungoTypecheck.invalidate(checker.utils, type)
+  private fun getInvalidatedType(type: AnnotatedTypeMirror) = MungoTypecheck.invalidate(checker.utils, type.underlyingType)
+
+  private fun getTypeFromTree(tree: Tree) = utils.factory.getAnnotatedType(tree)
 
   private fun getInitialType(tree: Tree, type: TypeMirror): MungoType {
     val element = TreeUtils.elementFromTree(tree)
@@ -76,7 +81,7 @@ class Analyzer(private val checker: MainChecker) {
       return if (decl == null)
         MungoTypecheck.typeLocalDeclaration(checker.utils, type)
       else
-        MungoTypecheck.typeLocalDeclaration(checker.utils, treeToType(decl))
+        MungoTypecheck.typeLocalDeclaration(checker.utils, getTypeFromTree(decl).underlyingType)
     }
     // If it is a parameter...
     if (element?.kind == ElementKind.PARAMETER) {
@@ -108,18 +113,30 @@ class Analyzer(private val checker: MainChecker) {
     return getInvalidatedType(type)
   }
 
-  fun getInitialInfo(tree: Tree, type: TypeMirror = treeToType(tree)): StoreInfo {
-    return StoreInfo(this, getInitialType(tree, type), type)
+  fun getInitialInfo(tree: Tree, type: AnnotatedTypeMirror = getTypeFromTree(tree)): StoreInfo {
+    return StoreInfo(this, getInitialType(tree, type.underlyingType), type)
   }
 
   private fun getInitialInfo(node: Node): StoreInfo {
-    val type = node.type
-    return node.tree?.let { getInitialInfo(it, type) } ?: StoreInfo(this, getInvalidatedType(type), type)
+    val tree = node.tree
+    if (tree != null && TreeUtils.canHaveTypeAnnotation(tree)) {
+      return getInitialInfo(tree)
+    }
+
+    if (node is ImplicitThisLiteralNode) {
+      return StoreInfo(
+        this,
+        MungoTypecheck.invalidate(checker.utils, node.type),
+        AnnotatedTypeMirror.createType(node.type, utils.factory, false)
+      )
+    }
+
+    return unknown
   }
 
-  fun getInitialInfo(type: TypeMirror, refine: Boolean = false): StoreInfo {
+  fun getInitialInfo(type: AnnotatedTypeMirror, refine: Boolean = false): StoreInfo {
     return StoreInfo(this, if (refine) {
-      MungoTypecheck.typeDeclaration(checker.utils, type)
+      MungoTypecheck.typeDeclaration(checker.utils, type.underlyingType)
     } else {
       getInvalidatedType(type)
     }, type)
@@ -129,7 +146,7 @@ class Analyzer(private val checker: MainChecker) {
     return getInferredInfo(tree).mungoType
   }
 
-  fun getInferredInfo(tree: Tree): StoreInfo {
+  fun getInferredInfoOptional(tree: Tree): StoreInfo? {
     val nodes = treeLookup[tree] ?: emptySet()
     var info: StoreInfo? = null
     for (node in nodes) {
@@ -142,7 +159,11 @@ class Analyzer(private val checker: MainChecker) {
         }
       }
     }
-    return info ?: unknown
+    return info
+  }
+
+  fun getInferredInfo(tree: Tree): StoreInfo {
+    return getInferredInfoOptional(tree) ?: unknown
   }
 
   // Some inference results depend on nodeValues, which might have changed.
@@ -165,11 +186,6 @@ class Analyzer(private val checker: MainChecker) {
     val value = nodeValues[node]
     dependencies.computeIfAbsent(currentBlock) { mutableSetOf() }.add(Pair.of(node, value))
     return value ?: default
-  }
-
-  // Used after analysis
-  fun getInferredInfo(node: Node): StoreInfo {
-    return nodeValues[node] ?: unknown
   }
 
   fun getRegularExitStore(tree: Tree): Store? {
@@ -265,7 +281,7 @@ class Analyzer(private val checker: MainChecker) {
       } else {
         val store = currentStore.toMutable()
         val internal = createFieldAccess(field, classTree)
-        store[internal] = StoreInfo(this, MungoNullType.SINGLETON, internal.type)
+        store[internal] = StoreInfo(this, MungoNullType.SINGLETON, utils.factory.getAnnotatedNullType(emptySet()))
         currentStore = store.toImmutable()
       }
     }
@@ -474,38 +490,19 @@ class Analyzer(private val checker: MainChecker) {
     }
   }
 
-  private fun debug(node: Node) = false
-
   private fun callInferrer(node: Node, input: AnalyzerResult): AnalyzerResult {
     // Store previous result
     resultsBefore[node] = input
 
     if (node.isLValue) {
       resultsAfter[node] = input
-      if (debug(node)) {
-        println("---")
-        println(node)
-        println(input)
-        println("---")
-      }
       return input
     }
 
     val initialValue = getInitialInfo(node)
     val mutableResult = MutableAnalyzerResultWithValue(initialValue, input)
 
-    if (debug(node)) {
-      println("---")
-      println(node)
-      println(mutableResult)
-    }
-
     node.accept(visitor, mutableResult)
-
-    if (debug(node)) {
-      println(mutableResult)
-      println("---")
-    }
 
     // Merge then and else stores
     if (!shouldEachToEach(node)) {

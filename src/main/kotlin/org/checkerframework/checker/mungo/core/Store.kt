@@ -1,26 +1,50 @@
 package org.checkerframework.checker.mungo.core
 
-import com.sun.tools.javac.code.Type
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoType
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
-import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
 import org.checkerframework.checker.mungo.utils.MungoUtils
-import org.checkerframework.javacutil.TypesUtils
-import javax.lang.model.element.Modifier
-import javax.lang.model.element.TypeElement
+import org.checkerframework.framework.type.AnnotatedTypeMirror
+import org.checkerframework.framework.type.visitor.EquivalentAtmComboScanner
+import org.checkerframework.javacutil.PluginUtil
 import javax.lang.model.type.TypeMirror
-import javax.lang.model.util.Types
 
-class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: TypeMirror) {
+private class AnnotatedTypeMirrorComparer : EquivalentAtmComboScanner<Boolean, Analyzer>() {
+  private fun compare(type1: AnnotatedTypeMirror, type2: AnnotatedTypeMirror, analyzer: Analyzer): Boolean {
+    return type1 === type2 || analyzer.utils.isSameType(type1.underlyingType, type2.underlyingType)
+  }
+
+  override fun scanWithNull(type1: AnnotatedTypeMirror?, type2: AnnotatedTypeMirror?, analyzer: Analyzer): Boolean {
+    return type1 === type2
+  }
+
+  override fun scan(type1: AnnotatedTypeMirror, type2: AnnotatedTypeMirror, analyzer: Analyzer): Boolean {
+    return compare(type1, type2, analyzer) && super.scan(type1, type2, analyzer)
+  }
+
+  override fun reduce(r1: Boolean, r2: Boolean): Boolean {
+    return r1 && r2
+  }
+
+  override fun defaultErrorMessage(type1: AnnotatedTypeMirror, type2: AnnotatedTypeMirror, analyzer: Analyzer): String {
+    throw UnsupportedOperationException(PluginUtil.joinLines("Comparing two different subclasses of AnnotatedTypeMirror.", "type1=$type1", "type2=$type2"))
+  }
+}
+
+private val EQUALITY_COMPARER = AnnotatedTypeMirrorComparer()
+
+class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: AnnotatedTypeMirror) {
 
   constructor(prevInfo: StoreInfo, newType: MungoType) : this(prevInfo.analyzer, newType, prevInfo.type)
+
+  val underlyingType: TypeMirror = type.underlyingType
 
   override fun equals(other: Any?): Boolean {
     if (this === other) return true
     if (other !is StoreInfo) return false
     if (mungoType != other.mungoType) return false
-    return (type === other.type || analyzer.utils.isSameType(type, other.type))
+    return analyzer.utils.isSameType(underlyingType, other.underlyingType)
+    // return EQUALITY_COMPARER.visit(type, other.type, analyzer)
   }
 
   override fun hashCode(): Int {
@@ -33,27 +57,24 @@ class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: Type
 
   companion object {
     fun merge(a: StoreInfo, b: StoreInfo): StoreInfo {
+      val analyzer = a.analyzer
+      // val type = analyzer.utils.leastUpperBound(a.underlyingType, b.underlyingType)
       return StoreInfo(
-        a.analyzer,
+        analyzer,
         a.mungoType.leastUpperBound(b.mungoType),
-        a.analyzer.utils.leastUpperBound(a.type, b.type)
+        a.type
+        // TODO this breaks the tests: analyzer.utils.createType(type, a.type.isDeclaration)
       )
     }
 
     fun intersect(a: StoreInfo, b: StoreInfo): StoreInfo {
-      val types = a.analyzer.utils.typeUtils
-      val mostSpecific = if (types.isAssignable(a.type, b.type)) {
-        a.type
-      } else if (types.isAssignable(b.type, a.type)) {
-        b.type
-      } else if (TypesUtils.isErasedSubtype(a.type, b.type, types)) {
-        a.type
-      } else if (TypesUtils.isErasedSubtype(b.type, a.type, types)) {
-        b.type
-      } else {
-        a.type
-      }
-      return StoreInfo(a.analyzer, a.mungoType.intersect(b.mungoType), mostSpecific)
+      val analyzer = a.analyzer
+      val mostSpecific = analyzer.utils.mostSpecific(a.underlyingType, b.underlyingType)
+      return StoreInfo(
+        analyzer,
+        a.mungoType.intersect(b.mungoType),
+        if (mostSpecific === a.underlyingType) a.type else b.type
+      )
     }
   }
 }

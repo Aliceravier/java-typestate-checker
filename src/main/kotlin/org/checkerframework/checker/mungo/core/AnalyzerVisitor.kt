@@ -45,7 +45,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
     parameters?.forEach {
       val internal = getReference(it)!!
       val mungoType = MungoTypecheck.typeDeclaration(utils, it.type)
-      store[internal] = StoreInfo(analyzer, mungoType, it.type)
+      store[internal] = StoreInfo(analyzer, mungoType, utils.factory.getAnnotatedType(it.element))
     }
 
     return store.toImmutable()
@@ -257,7 +257,7 @@ class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: An
     processMethodArguments(node.arguments, TreeUtils.elementFromUse(node.tree)!!, result)
 
     // Refine result value to the initial state
-    result.value = StoreInfo(result.value, MungoTypecheck.objectCreation(utils, result.value.type))
+    result.value = StoreInfo(result.value, MungoTypecheck.objectCreation(utils, result.value.underlyingType))
     return null
   }
 

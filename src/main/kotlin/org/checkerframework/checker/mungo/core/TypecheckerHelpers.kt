@@ -10,6 +10,7 @@ import org.checkerframework.checker.mungo.typecheck.*
 import org.checkerframework.checker.mungo.utils.ClassUtils
 import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.framework.source.SourceVisitor
+import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.javacutil.ElementUtils
 import org.checkerframework.javacutil.TreeUtils
 import org.checkerframework.javacutil.TypesUtils
@@ -24,7 +25,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
 
   protected fun checkReturnTypeAnnotation(node: AnnotationTree, annoMirror: AnnotationMirror, parent: Tree) {
     if (parent is MethodTree && parent.modifiers.annotations.contains(node)) {
-      val typeMirror = treeToType(parent.returnType)
+      val typeMirror = TreeUtils.elementFromTree(parent.returnType)?.asType()
       if (typeMirror != null) {
         if (ClassUtils.isJavaLangObject(typeMirror)) {
           utils.err("@MungoState has no meaning in Object type", node)
@@ -45,7 +46,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
 
   protected fun checkParameterAnnotation(node: AnnotationTree, annoMirror: AnnotationMirror, parent: Tree, parentParent: Tree, name: String) {
     if (parent is VariableTree && parentParent is MethodTree && parentParent.parameters.contains(parent)) {
-      val typeMirror = treeToType(parent)
+      val typeMirror = TreeUtils.elementFromTree(parent)?.asType()
       if (typeMirror != null) {
         if (ClassUtils.isJavaLangObject(typeMirror)) {
           utils.err("@$name has no meaning in Object type", node)
@@ -115,7 +116,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
 
   private fun getParamTypesAfterCall(parameters: List<VariableTree>): Map<String, MungoType?> {
     return parameters.map {
-      val typeMirror = treeToType(it)
+      val typeMirror = TreeUtils.elementFromTree(it)!!.asType()
       val type = MungoTypecheck.typeAfterMethodCall(utils, typeMirror)
       Pair(it.name.toString(), type)
     }.toMap()
@@ -161,15 +162,11 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
       else -> throw RuntimeException("unexpected tree")
     }
 
-    if (isLastArgumentArrayMatchingVararg(varargs, parameters, args)) {
-      return
-    }
-
     // TODO
   }
 
   protected fun commonAssignmentCheck(left: Tree, right: Tree, errorKey: String) {
-    commonAssignmentCheck(treeToType(left), left, treeToType(right), right, errorKey)
+    commonAssignmentCheck(utils.factory.getAnnotatedType(left), left, utils.factory.getAnnotatedType(right), right, errorKey)
 
     when (left) {
       is VariableTree -> {
@@ -195,18 +192,18 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
     }
   }
 
-  protected fun commonAssignmentCheckParameter(varType: TypeMirror, valueExp: Tree, errorKey: String) {
-    commonAssignmentCheck(varType, null, treeToType(valueExp), valueExp, errorKey, true)
+  protected fun commonAssignmentCheckParameter(varType: AnnotatedTypeMirror, valueExp: Tree, errorKey: String) {
+    commonAssignmentCheck(varType, null, utils.factory.getAnnotatedType(valueExp), valueExp, errorKey, true)
   }
 
-  protected fun commonAssignmentCheckReturn(varType: TypeMirror, valueExp: Tree) {
-    commonAssignmentCheck(varType, null, treeToType(valueExp), valueExp, "return.type.incompatible", true)
+  protected fun commonAssignmentCheckReturn(varType: AnnotatedTypeMirror, valueExp: Tree) {
+    commonAssignmentCheck(varType, null, utils.factory.getAnnotatedType(valueExp), valueExp, "return.type.incompatible", true)
   }
 
   private fun isPrimitiveAndBoxedPrimitive(aType: MungoType, bType: MungoType, bMirror: TypeMirror) =
     aType.isSubtype(MungoPrimitiveType.SINGLETON) && bType.isSubtype(MungoNoProtocolType.SINGLETON) && TypesUtils.isBoxedPrimitive(bMirror)
 
-  protected fun commonAssignmentCheck(varType: TypeMirror, varTree: Tree?, valueType: TypeMirror, valueTree: Tree, errorKey: String, refine: Boolean = false) {
+  protected fun commonAssignmentCheck(varType: AnnotatedTypeMirror, varTree: Tree?, valueType: AnnotatedTypeMirror, valueTree: Tree, errorKey: String, refine: Boolean = false) {
     if (varType is Type.ArrayType && valueTree is NewArrayTree && valueTree.type == null) {
       // TODO checkArrayInitialization(varType.componentType, valueTree.initializers)
     }
@@ -223,7 +220,7 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
       }
     }
 
-    if (TypesUtils.isPrimitive(varType) && TypesUtils.isBoxedPrimitive(valueType)) {
+    if (TypesUtils.isPrimitive(varType.underlyingType) && TypesUtils.isBoxedPrimitive(valueType.underlyingType)) {
       if (!checkForNullability(valueTree as ExpressionTree, UNBOXING_OF_NULLABLE)) {
         // Only issue the unboxing of nullable error
         return
@@ -235,8 +232,8 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
     val valMungoType = analyzer.getInferredType(valueTree)
 
     // Assignments from boxed primitives to primitives and vice-versa should be allowed
-    if (isPrimitiveAndBoxedPrimitive(varMungoType, valMungoType, valueType)) return
-    if (isPrimitiveAndBoxedPrimitive(valMungoType, varMungoType, varType)) return
+    if (isPrimitiveAndBoxedPrimitive(varMungoType, valMungoType, valueType.underlyingType)) return
+    if (isPrimitiveAndBoxedPrimitive(valMungoType, varMungoType, varType.underlyingType)) return
 
     if (!valMungoType.isSubtype(varMungoType)) {
       val pair = FoundRequired.of(valueType, varType)
@@ -283,12 +280,12 @@ open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, V
 
   protected fun isPrimitive(tree: ExpressionTree) = TreeUtils.typeOf(tree).kind.isPrimitive
 
-  protected class FoundRequired(found: TypeMirror, required: TypeMirror) {
+  protected class FoundRequired(found: AnnotatedTypeMirror, required: AnnotatedTypeMirror) {
     val found = found.toString()
     val required = required.toString()
 
     companion object {
-      fun of(found: TypeMirror, required: TypeMirror): FoundRequired {
+      fun of(found: AnnotatedTypeMirror, required: AnnotatedTypeMirror): FoundRequired {
         return FoundRequired(found, required)
       }
     }

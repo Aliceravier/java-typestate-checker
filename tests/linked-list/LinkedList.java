@@ -42,7 +42,7 @@ public class LinkedList {
 
   public @MungoNullable Item get(int idx) {
     @MungoNullable Node node = this.head;
-    // :: warning: (node: Null | NoProtocol)
+    // :: warning: (node: NoProtocol | Null)
     for (int i = 0; node != null && i < idx; i++) {
       node = node.next;
     }
