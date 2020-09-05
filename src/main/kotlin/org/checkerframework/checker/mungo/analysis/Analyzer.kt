@@ -1,11 +1,11 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.analysis
 
 import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Type
 import com.sun.tools.javac.tree.JCTree
 import com.sun.tools.javac.tree.TreeInfo
-import org.checkerframework.checker.mungo.MainChecker
+import org.checkerframework.checker.mungo.MungoChecker
 import org.checkerframework.checker.mungo.typecheck.MungoNullType
 import org.checkerframework.checker.mungo.typecheck.MungoType
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
@@ -33,7 +33,7 @@ import javax.lang.model.element.ExecutableElement
 import javax.lang.model.type.TypeMirror
 import org.checkerframework.dataflow.analysis.Store.Kind as StoreKind
 
-class Analyzer(private val checker: MainChecker) {
+class Analyzer(private val checker: MungoChecker) {
 
   val utils get() = checker.utils
   lateinit var unknown: StoreInfo

@@ -1,14 +1,15 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.typecheck
 
 import com.sun.source.tree.*
 import com.sun.source.util.TreePath
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Type
 import com.sun.tools.javac.tree.JCTree
-import org.checkerframework.checker.mungo.MainChecker
-import org.checkerframework.checker.mungo.typecheck.*
+import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.analysis.*
 import org.checkerframework.checker.mungo.utils.ClassUtils
 import org.checkerframework.checker.mungo.utils.MungoUtils
+import org.checkerframework.checker.mungo.utils.isSelfAccess
 import org.checkerframework.framework.source.SourceVisitor
 import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.javacutil.ElementUtils
@@ -18,7 +19,7 @@ import javax.lang.model.element.AnnotationMirror
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.type.TypeMirror
 
-open class TypecheckerHelpers(val checker: MainChecker) : SourceVisitor<Void?, Void?>(checker) {
+open class TypecheckerHelpers(val checker: MungoChecker) : SourceVisitor<Void?, Void?>(checker) {
 
   protected val analyzer = Analyzer(checker)
   protected val utils get() = checker.utils

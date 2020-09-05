@@ -1,12 +1,12 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.typecheck
 
 import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol
-import com.sun.tools.javac.code.Type
-import org.checkerframework.checker.mungo.MainChecker
-import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
+import org.checkerframework.checker.mungo.MungoChecker
+import org.checkerframework.checker.mungo.utils.isSelfAccess
+import org.checkerframework.checker.mungo.utils.lowerBound
+import org.checkerframework.checker.mungo.utils.upperBound
 import org.checkerframework.checker.mungo.utils.MungoUtils
-import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.framework.util.AnnotatedTypes
 import org.checkerframework.javacutil.AnnotationUtils
 import org.checkerframework.javacutil.ElementUtils
@@ -20,7 +20,7 @@ import javax.lang.model.type.TypeMirror
 // TODO check redundant tests
 // TODO check arrays of non-null items are initialized
 
-class Typechecker(checker: MainChecker) : TypecheckerHelpers(checker) {
+class Typechecker(checker: MungoChecker) : TypecheckerHelpers(checker) {
 
   // root
   // currentPath

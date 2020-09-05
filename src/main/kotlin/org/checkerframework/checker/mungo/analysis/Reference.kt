@@ -1,4 +1,4 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.analysis
 
 import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol.VarSymbol

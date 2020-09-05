@@ -1,24 +1,8 @@
 package org.checkerframework.checker.mungo.typecheck
 
-import org.checkerframework.checker.mungo.qualifiers.MungoBottom
-import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo
-import org.checkerframework.checker.mungo.qualifiers.MungoUnknown
 import org.checkerframework.checker.mungo.typestate.graph.Graph
 import org.checkerframework.checker.mungo.typestate.graph.State
 import org.checkerframework.checker.mungo.utils.MungoUtils
-import org.checkerframework.javacutil.AnnotationBuilder
-import org.checkerframework.javacutil.AnnotationUtils
-import javax.annotation.processing.ProcessingEnvironment
-import javax.lang.model.element.AnnotationMirror
-
-// pre: annotation is @MungoInternalInfo
-fun getTypeFromAnnotation(annotation: AnnotationMirror): MungoType {
-  if (AnnotationUtils.areSameByName(annotation, MungoUtils.mungoInternalInfoName)) {
-    val id = AnnotationUtils.getElementValue(annotation, "id", java.lang.Long::class.java, false)
-    return map[id.toLong()]!!
-  }
-  throw AssertionError("getTypeFromAnnotation")
-}
 
 // To avoid the creation of new unnecessary MungoType instances
 private val graphToType = mutableMapOf<Graph, MungoType>()
@@ -27,39 +11,19 @@ fun createTypeWithAllStates(graph: Graph) = graphToType.computeIfAbsent(graph) {
 }
 
 sealed class MungoType {
-  abstract fun buildAnnotation(env: ProcessingEnvironment): AnnotationMirror
-  abstract fun isSubtype(other: MungoType): Boolean
-  abstract fun intersect(other: MungoType): MungoType
-  abstract fun mostSpecific(other: MungoType): MungoType?
-  abstract fun leastUpperBound(other: MungoType): MungoType
   abstract fun format(): String
-}
 
-private var uuid = 0L
-private val map = mutableMapOf<Long, MungoType>()
+  open fun isSubtype(other: MungoType): Boolean = isSubtype(this, other)
 
-// These types seat between Unknown and Bottom
-sealed class MungoTypeWithId : MungoType() {
+  open fun intersect(other: MungoType): MungoType = intersect(this, other)
 
-  val id: Long = uuid++
-
-  override fun buildAnnotation(env: ProcessingEnvironment): AnnotationMirror {
-    val builder = AnnotationBuilder(env, MungoInternalInfo::class.java)
-    builder.setValue("id", id)
-    return builder.build()
-  }
-
-  override fun isSubtype(other: MungoType): Boolean = isSubtype(this, other)
-
-  override fun intersect(other: MungoType): MungoType = intersect(this, other)
-
-  override fun mostSpecific(other: MungoType) = when {
+  open fun mostSpecific(other: MungoType) = when {
     this.isSubtype(other) -> this
     other.isSubtype(this) -> other
     else -> null
   }
 
-  override fun leastUpperBound(other: MungoType) = MungoUnionType.create(listOf(this, other))
+  open fun leastUpperBound(other: MungoType) = MungoUnionType.create(listOf(this, other))
 }
 
 private fun isObjectType(a: MungoType) = a is MungoStateType || a is MungoEndedType || a is MungoNoProtocolType
@@ -124,10 +88,9 @@ private fun intersect(a: MungoType, b: MungoType): MungoType = when (a) {
   }
 }
 
-class MungoUnionType private constructor(val types: Set<MungoType>) : MungoTypeWithId() {
+class MungoUnionType private constructor(val types: Set<MungoType>) : MungoType() {
 
   init {
-    map[id] = this
     if (types.isEmpty()) {
       MungoUtils.printStack()
       throw AssertionError("union invariant")
@@ -190,11 +153,7 @@ class MungoUnionType private constructor(val types: Set<MungoType>) : MungoTypeW
   }
 }
 
-class MungoStateType private constructor(val graph: Graph, val state: State) : MungoTypeWithId() {
-
-  init {
-    map[id] = this
-  }
+class MungoStateType private constructor(val graph: Graph, val state: State) : MungoType() {
 
   companion object {
     fun create(graph: Graph, state: State) = if (state.isEnd()) MungoEndedType.SINGLETON else MungoStateType(graph, state)
@@ -211,7 +170,7 @@ class MungoStateType private constructor(val graph: Graph, val state: State) : M
   override fun format() = "${graph.typestateName}{${state.name}}"
 }
 
-sealed class MungoTypeSingletons(private val hashCode: Int) : MungoTypeWithId() {
+sealed class MungoTypeSingletons(private val hashCode: Int) : MungoType() {
   override fun equals(other: Any?) = this === other
   override fun hashCode() = hashCode
 }
@@ -220,10 +179,6 @@ class MungoObjectType private constructor() : MungoTypeSingletons(7) {
 
   companion object {
     val SINGLETON = MungoObjectType()
-  }
-
-  init {
-    map[id] = this
   }
 
   override fun toString() = "MungoObjectType"
@@ -236,10 +191,6 @@ class MungoEndedType private constructor() : MungoTypeSingletons(6) {
     val SINGLETON = MungoEndedType()
   }
 
-  init {
-    map[id] = this
-  }
-
   override fun toString() = "MungoEndedType"
   override fun format() = "Ended"
 }
@@ -248,10 +199,6 @@ class MungoNoProtocolType private constructor() : MungoTypeSingletons(5) {
 
   companion object {
     val SINGLETON = MungoNoProtocolType()
-  }
-
-  init {
-    map[id] = this
   }
 
   override fun toString() = "MungoNoProtocolType"
@@ -264,10 +211,6 @@ class MungoMovedType private constructor() : MungoTypeSingletons(4) {
     val SINGLETON = MungoMovedType()
   }
 
-  init {
-    map[id] = this
-  }
-
   override fun toString() = "MungoMovedType"
   override fun format() = "Moved"
 }
@@ -276,10 +219,6 @@ class MungoPrimitiveType private constructor() : MungoTypeSingletons(3) {
 
   companion object {
     val SINGLETON = MungoPrimitiveType()
-  }
-
-  init {
-    map[id] = this
   }
 
   override fun toString() = "MungoPrimitiveType"
@@ -292,10 +231,6 @@ class MungoNullType private constructor() : MungoTypeSingletons(2) {
     val SINGLETON = MungoNullType()
   }
 
-  init {
-    map[id] = this
-  }
-
   override fun toString() = "MungoNullType"
   override fun format() = "Null"
 }
@@ -305,7 +240,6 @@ class MungoUnknownType private constructor() : MungoType() {
     val SINGLETON = MungoUnknownType()
   }
 
-  override fun buildAnnotation(env: ProcessingEnvironment): AnnotationMirror = AnnotationBuilder(env, MungoUnknown::class.java).build()
   override fun isSubtype(other: MungoType) = this === other
   override fun intersect(other: MungoType) = other
   override fun mostSpecific(other: MungoType) = other
@@ -321,7 +255,6 @@ class MungoBottomType private constructor() : MungoType() {
     val SINGLETON = MungoBottomType()
   }
 
-  override fun buildAnnotation(env: ProcessingEnvironment): AnnotationMirror = AnnotationBuilder(env, MungoBottom::class.java).build()
   override fun isSubtype(other: MungoType) = true
   override fun intersect(other: MungoType) = this
   override fun mostSpecific(other: MungoType) = this

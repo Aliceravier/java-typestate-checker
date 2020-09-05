@@ -1,9 +1,9 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.analysis
 
 import com.sun.source.tree.*
 import com.sun.source.util.TreePath
 import com.sun.tools.javac.code.Symbol
-import org.checkerframework.checker.mungo.MainChecker
+import org.checkerframework.checker.mungo.MungoChecker
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoMovedType
 import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
@@ -17,7 +17,7 @@ import javax.lang.model.element.ElementKind
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.type.TypeMirror
 
-class AnalyzerVisitor(private val checker: MainChecker, private val analyzer: Analyzer) : AbstractNodeVisitor<Void?, MutableAnalyzerResultWithValue>() {
+class AnalyzerVisitor(private val checker: MungoChecker, private val analyzer: Analyzer) : AbstractNodeVisitor<Void?, MutableAnalyzerResultWithValue>() {
 
   private val utils get() = checker.utils
 

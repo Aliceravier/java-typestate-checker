@@ -1,18 +1,18 @@
 package org.checkerframework.checker.mungo
 
-import org.checkerframework.checker.mungo.core.Typechecker
+import org.checkerframework.checker.mungo.typecheck.Typechecker
 import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.framework.source.SourceChecker
 import org.checkerframework.framework.source.SourceVisitor
 
 const val showTypeInfoOpt = "showTypeInfo"
-const val configFile = "configFile"
+const val configFileOpt = "configFile"
 
-class MainChecker : SourceChecker() {
+class MungoChecker : SourceChecker() {
 
   lateinit var utils: MungoUtils
 
-  override fun getSupportedOptions() = super.getSupportedOptions().plus(showTypeInfoOpt).plus(configFile)
+  override fun getSupportedOptions() = super.getSupportedOptions().plus(showTypeInfoOpt).plus(configFileOpt)
 
   fun shouldReportTypeInfo() = hasOption(showTypeInfoOpt)
 

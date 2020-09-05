@@ -1,4 +1,4 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.analysis
 
 import com.sun.source.tree.BlockTree
 import com.sun.source.tree.ClassTree

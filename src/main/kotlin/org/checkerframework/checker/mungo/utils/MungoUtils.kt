@@ -12,20 +12,11 @@ import com.sun.tools.javac.file.JavacFileManager
 import com.sun.tools.javac.processing.JavacProcessingEnvironment
 import com.sun.tools.javac.util.JCDiagnostic
 import com.sun.tools.javac.util.Log
-import org.checkerframework.checker.mungo.core.FakeAnnotatedTypeFactory
+import org.checkerframework.checker.mungo.analysis.FakeAnnotatedTypeFactory
 import org.checkerframework.checker.mungo.lib.*
-import org.checkerframework.checker.mungo.qualifiers.MungoBottom
-import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo
-import org.checkerframework.checker.mungo.qualifiers.MungoUnknown
-import org.checkerframework.checker.mungo.typecheck.MungoBottomType
-import org.checkerframework.checker.mungo.typecheck.MungoType
-import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
-import org.checkerframework.checker.mungo.typecheck.getTypeFromAnnotation
 import org.checkerframework.checker.mungo.typestate.TypestateProcessor
 import org.checkerframework.checker.mungo.typestate.graph.Graph
 import org.checkerframework.framework.source.SourceChecker
-import org.checkerframework.framework.stub.StubTypes
-import org.checkerframework.framework.type.AnnotatedTypeFactory
 import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.javacutil.*
 import java.nio.file.Path
@@ -37,15 +28,6 @@ import javax.lang.model.type.TypeMirror
 import javax.tools.JavaFileManager
 
 class MungoUtils(val checker: SourceChecker) {
-
-  class LazyField<T>(private val fn: () -> T) {
-    private var value: T? = null
-    fun get() = value ?: run {
-      val v = fn()
-      value = v
-      v
-    }
-  }
 
   val env = (checker.processingEnvironment as JavacProcessingEnvironment)
   val ctx = env.context
@@ -232,11 +214,6 @@ class MungoUtils(val checker: SourceChecker) {
       "io.reactivex.annotations.Nullable"
     )
 
-    // Internal annotations for type information
-    val mungoUnknownName: String = MungoUnknown::class.java.canonicalName
-    val mungoInternalInfoName: String = MungoInternalInfo::class.java.canonicalName
-    val mungoBottomName: String = MungoBottom::class.java.canonicalName
-
     fun isMungoLibAnnotation(annotation: AnnotationMirror): Boolean {
       val name = AnnotationUtils.annotationName(annotation)
       return name == mungoState ||
@@ -244,40 +221,6 @@ class MungoUtils(val checker: SourceChecker) {
         name == mungoEnsures ||
         typestateAnnotations.contains(name) ||
         nullableAnnotations.contains(name)
-    }
-
-    fun isMungoInternalAnnotation(annotation: AnnotationMirror): Boolean {
-      return AnnotationUtils.areSameByName(annotation, mungoUnknownName) ||
-        AnnotationUtils.areSameByName(annotation, mungoInternalInfoName) ||
-        AnnotationUtils.areSameByName(annotation, mungoBottomName)
-    }
-
-    fun mungoTypeFromAnnotation(annotation: AnnotationMirror): MungoType {
-      if (AnnotationUtils.areSameByName(annotation, mungoUnknownName)) {
-        return MungoUnknownType.SINGLETON
-      }
-      if (AnnotationUtils.areSameByName(annotation, mungoInternalInfoName)) {
-        return getTypeFromAnnotation(annotation)
-      }
-      if (AnnotationUtils.areSameByName(annotation, mungoBottomName)) {
-        return MungoBottomType.SINGLETON
-      }
-      throw AssertionError("mungoTypeFromAnnotation")
-    }
-
-    fun mungoTypeFromAnnotations(annotations: Collection<AnnotationMirror>): MungoType {
-      for (annotation in annotations) {
-        if (AnnotationUtils.areSameByName(annotation, mungoUnknownName)) {
-          return MungoUnknownType.SINGLETON
-        }
-        if (AnnotationUtils.areSameByName(annotation, mungoInternalInfoName)) {
-          return getTypeFromAnnotation(annotation)
-        }
-        if (AnnotationUtils.areSameByName(annotation, mungoBottomName)) {
-          return MungoBottomType.SINGLETON
-        }
-      }
-      return MungoUnknownType.SINGLETON
     }
 
     fun getAnnotationValue(annotationMirror: AnnotationMirror?): List<String>? {
@@ -313,7 +256,7 @@ class MungoUtils(val checker: SourceChecker) {
       return null
     }
 
-    val cwd = Paths.get("").toAbsolutePath()
+    val cwd: Path = Paths.get("").toAbsolutePath()
 
     fun getUserPath(p: Path): Path = if (p.isAbsolute) cwd.relativize(p) else p
 
@@ -325,10 +268,6 @@ class MungoUtils(val checker: SourceChecker) {
       }
     }
 
-    fun <T> printResult(prefix: String, ret: T): T {
-      println("$prefix $ret")
-      return ret
-    }
   }
 
 }

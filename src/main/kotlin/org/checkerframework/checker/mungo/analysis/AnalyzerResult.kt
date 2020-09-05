@@ -1,4 +1,4 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.analysis
 
 class AnalyzerResult(_thenStore: Store, _elseStore: Store) {
 

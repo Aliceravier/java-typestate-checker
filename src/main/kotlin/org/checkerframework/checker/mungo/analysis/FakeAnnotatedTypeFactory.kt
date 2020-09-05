@@ -1,11 +1,9 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.analysis
 
 import com.sun.source.tree.Tree
 import org.checkerframework.checker.mungo.qualifiers.MungoBottom
 import org.checkerframework.checker.mungo.qualifiers.MungoInternalInfo
 import org.checkerframework.checker.mungo.qualifiers.MungoUnknown
-import org.checkerframework.checker.mungo.typecheck.MungoBottomType
-import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
 import org.checkerframework.common.basetype.BaseTypeChecker
 import org.checkerframework.framework.source.SourceChecker
 import org.checkerframework.framework.stub.StubTypes
@@ -14,6 +12,7 @@ import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.framework.type.QualifierHierarchy
 import org.checkerframework.framework.util.GraphQualifierHierarchy
 import org.checkerframework.framework.util.MultiGraphQualifierHierarchy
+import org.checkerframework.javacutil.AnnotationBuilder
 import javax.lang.model.element.AnnotationMirror
 import javax.lang.model.element.Element
 
@@ -28,8 +27,8 @@ class FakeAnnotatedTypeFactory(myChecker: SourceChecker) : AnnotatedTypeFactory(
   private val typesFromStubFilesField = StubTypes::class.java.getDeclaredField("typesFromStubFiles")
   private val typesFromStubFiles = mutableMapOf<Element, AnnotatedTypeMirror>()
 
-  private val topAnnotation = MungoUnknownType.SINGLETON.buildAnnotation(checker.processingEnvironment)
-  private val bottomAnnotation = MungoBottomType.SINGLETON.buildAnnotation(checker.processingEnvironment)
+  private val topAnnotation = AnnotationBuilder(checker.processingEnvironment, MungoUnknown::class.java).build()
+  private val bottomAnnotation = AnnotationBuilder(checker.processingEnvironment, MungoBottom::class.java).build()
 
   init {
     typesFromStubFilesField.isAccessible = true

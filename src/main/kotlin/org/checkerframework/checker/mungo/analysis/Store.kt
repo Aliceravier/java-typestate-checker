@@ -1,4 +1,4 @@
-package org.checkerframework.checker.mungo.core
+package org.checkerframework.checker.mungo.analysis
 
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoType
@@ -44,7 +44,7 @@ class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: Anno
     if (other !is StoreInfo) return false
     if (mungoType != other.mungoType) return false
     return analyzer.utils.isSameType(underlyingType, other.underlyingType)
-    // return EQUALITY_COMPARER.visit(type, other.type, analyzer)
+    // TODO infinite loop? return EQUALITY_COMPARER.visit(type, other.type, analyzer)
   }
 
   override fun hashCode(): Int {

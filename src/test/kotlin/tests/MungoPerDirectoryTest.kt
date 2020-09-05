@@ -1,6 +1,6 @@
 package tests
 
-import org.checkerframework.checker.mungo.MainChecker
+import org.checkerframework.checker.mungo.MungoChecker
 import org.checkerframework.framework.test.CheckerFrameworkPerDirectoryTest
 import org.checkerframework.framework.test.TestConfigurationBuilder
 import org.checkerframework.framework.test.TestUtilities
@@ -12,7 +12,7 @@ val ignore = emptyArray<String>()
 
 abstract class MungoPerDirectoryTest(val originalTestDir: String, testFiles: List<File>, opts: Array<String>) : CheckerFrameworkPerDirectoryTest(
   testFiles,
-  MainChecker::class.java,
+  MungoChecker::class.java,
   originalTestDir,
   *opts
 ) {
