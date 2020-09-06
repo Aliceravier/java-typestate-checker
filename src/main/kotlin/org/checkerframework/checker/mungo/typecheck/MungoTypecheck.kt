@@ -239,19 +239,19 @@ object MungoTypecheck {
   }
 
   // Get the least upper bound of the possible type, assuming anything happened
-  fun invalidate(utils: MungoUtils, type: TypeMirror): MungoType {
+  fun invalidate(utils: MungoUtils, type: TypeMirror, forceNullable: Boolean = false): MungoType {
     when {
       type.kind.isPrimitive -> return MungoPrimitiveType.SINGLETON
       type.kind == TypeKind.VOID -> return MungoPrimitiveType.SINGLETON
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
       type is Type.TypeVar ->
-        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON, MungoMovedType.SINGLETON))
+        return invalidate(utils, type.upperBound, true)
       type is Type.WildcardType ->
-        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON, MungoMovedType.SINGLETON))
+        return invalidate(utils, type.extendsBound, true)
     }
 
-    val isNullable = type.annotationMirrors.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
+    val isNullable = forceNullable || type.annotationMirrors.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
 
     val mungoType = if (ClassUtils.isJavaLangObject(type)) {
       MungoUnionType.create(setOf(MungoObjectType.SINGLETON, MungoMovedType.SINGLETON))
@@ -277,9 +277,9 @@ object MungoTypecheck {
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
       type is Type.TypeVar ->
-        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
+        return invalidate(utils, type.upperBound, true)
       type is Type.WildcardType ->
-        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
+        return invalidate(utils, type.extendsBound, true)
     }
 
     val isNullable = annotations.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
@@ -318,9 +318,9 @@ object MungoTypecheck {
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
       type is Type.TypeVar ->
-        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
+        return invalidate(utils, type.upperBound, true)
       type is Type.WildcardType ->
-        return MungoUnionType.create(listOf(MungoObjectType.SINGLETON, MungoNullType.SINGLETON))
+        return invalidate(utils, type.extendsBound, true)
     }
 
     val isNullable = annotations.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }

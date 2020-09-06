@@ -177,9 +177,9 @@ open class TypecheckerHelpers(val checker: MungoChecker) : SourceVisitor<Void?, 
         checkFinalType(receiver.toString(), leftValue, left)
       }
       is ExpressionTree -> {
-        val receiver = getReference(left) ?: return
-        val leftValue = analyzer.getStoreBefore(left)[receiver] ?: analyzer.getInitialInfo(left)
-        checkFinalType(receiver.toString(), leftValue, left)
+        val receiver = getReference(left)
+        val leftValue = receiver?.let { analyzer.getStoreBefore(left)[it] }
+        checkFinalType(receiver?.toString() ?: "", leftValue ?: analyzer.getInitialInfo(left), left)
 
         if (left is JCTree.JCFieldAccess) {
           if (ElementUtils.isElementFromByteCode(left.selected.type.asElement())) {
@@ -237,10 +237,12 @@ open class TypecheckerHelpers(val checker: MungoChecker) : SourceVisitor<Void?, 
     if (isPrimitiveAndBoxedPrimitive(valMungoType, varMungoType, varType.underlyingType)) return
 
     if (!valMungoType.isSubtype(varMungoType)) {
-      val pair = FoundRequired.of(valueType, varType)
-      val valueTypeString = pair.found
-      val varTypeString = pair.required
-      checker.reportError(valueTree, errorKey, valueTypeString, varTypeString)
+      checker.reportError(
+        valueTree,
+        errorKey,
+        "${valMungoType.format()} $valueType",
+        "${varMungoType.format()} $varType"
+      )
     }
   }
 
@@ -280,17 +282,6 @@ open class TypecheckerHelpers(val checker: MungoChecker) : SourceVisitor<Void?, 
   }
 
   protected fun isPrimitive(tree: ExpressionTree) = TreeUtils.typeOf(tree).kind.isPrimitive
-
-  protected class FoundRequired(found: AnnotatedTypeMirror, required: AnnotatedTypeMirror) {
-    val found = found.toString()
-    val required = required.toString()
-
-    companion object {
-      fun of(found: AnnotatedTypeMirror, required: AnnotatedTypeMirror): FoundRequired {
-        return FoundRequired(found, required)
-      }
-    }
-  }
 
   companion object {
     const val UNBOXING_OF_NULLABLE = "unboxing.of.nullable"

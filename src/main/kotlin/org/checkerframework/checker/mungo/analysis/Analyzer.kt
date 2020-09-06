@@ -207,7 +207,11 @@ class Analyzer(private val checker: MungoChecker) {
 
   fun getStoreBefore(node: Node) = getResultBefore(node).regularStore
 
-  fun getResultExit(cfg: ControlFlowGraph) = inputs[cfg.regularExitBlock]
+  fun getResultExit(cfg: ControlFlowGraph): AnalyzerResult {
+    val regularResult = inputs[cfg.regularExitBlock]
+    // Might be null if a method ends with a thrown exception
+    return regularResult ?: AnalyzerResult(Store.empty, Store.empty)
+  }
 
   fun getResultExceptionalExit(cfg: ControlFlowGraph) = inputs[cfg.exceptionalExitBlock]
 
@@ -404,7 +408,7 @@ class Analyzer(private val checker: MungoChecker) {
     }
 
     // Store results
-    val exitResult = getResultExit(cfg)!!
+    val exitResult = getResultExit(cfg)
     resultsExit[tree] = exitResult
     returnStatementStores[tree] = getReturnStatementStores(cfg)
 
@@ -448,6 +452,8 @@ class Analyzer(private val checker: MungoChecker) {
         val node = block.node
         val succ = block.successor
         val result = callInferrer(node, inputBefore)
+
+        // TODO handle possible exceptions
 
         // Propagate store
         if (succ != null) {

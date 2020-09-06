@@ -51,6 +51,9 @@ sourceSets {
         kotlin {
             srcDirs = ["src/main/java", "src/main/kotlin"]
         }
+        resources {
+            srcDirs = ["src/main/resources"]
+        }
     }
 }
 

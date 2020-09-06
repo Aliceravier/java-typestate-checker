@@ -7,9 +7,8 @@ import org.checkerframework.checker.mungo.qualifiers.MungoUnknown
 import org.checkerframework.common.basetype.BaseTypeChecker
 import org.checkerframework.framework.source.SourceChecker
 import org.checkerframework.framework.stub.StubTypes
-import org.checkerframework.framework.type.AnnotatedTypeFactory
-import org.checkerframework.framework.type.AnnotatedTypeMirror
-import org.checkerframework.framework.type.QualifierHierarchy
+import org.checkerframework.framework.type.*
+import org.checkerframework.framework.util.DefaultAnnotationFormatter
 import org.checkerframework.framework.util.GraphQualifierHierarchy
 import org.checkerframework.framework.util.MultiGraphQualifierHierarchy
 import org.checkerframework.javacutil.AnnotationBuilder
@@ -40,15 +39,35 @@ class FakeAnnotatedTypeFactory(myChecker: SourceChecker) : AnnotatedTypeFactory(
     parseStubFiles()
   }
 
+  private class AnnotationFormatter : DefaultAnnotationFormatter() {
+    override fun formatAnnotationString(annos: MutableCollection<out AnnotationMirror>?, printInvisible: Boolean): String {
+      return ""
+    }
+
+    override fun formatAnnotationMirror(am: AnnotationMirror, sb: StringBuilder) {
+
+    }
+  }
+
+  override fun createAnnotatedTypeFormatter(): AnnotatedTypeFormatter {
+    val printVerboseGenerics = checker.hasOption("printVerboseGenerics")
+    val defaultPrintInvisibleAnnos = printVerboseGenerics || checker.hasOption("printAllQualifiers")
+    return DefaultAnnotatedTypeFormatter(
+      AnnotationFormatter(),
+      printVerboseGenerics, // -AprintVerboseGenerics implies -AprintAllQualifiers
+      defaultPrintInvisibleAnnos
+    )
+  }
+
   override fun createSupportedTypeQualifiers(): Set<Class<out Annotation>> {
     return setOf(MungoBottom::class.java, MungoInternalInfo::class.java, MungoUnknown::class.java)
   }
 
   override fun createQualifierHierarchy(factory: MultiGraphQualifierHierarchy.MultiGraphFactory): QualifierHierarchy {
-    return MungoQualifierHierarchy(factory, bottomAnnotation)
+    return FakeQualifierHierarchy(factory, bottomAnnotation)
   }
 
-  private inner class MungoQualifierHierarchy(f: MultiGraphFactory, bottom: AnnotationMirror) : GraphQualifierHierarchy(f, bottom) {
+  private inner class FakeQualifierHierarchy(f: MultiGraphFactory, bottom: AnnotationMirror) : GraphQualifierHierarchy(f, bottom) {
     override fun findTops(supertypes: MutableMap<AnnotationMirror, MutableSet<AnnotationMirror>>?): MutableSet<AnnotationMirror> {
       return mutableSetOf(topAnnotation)
     }
