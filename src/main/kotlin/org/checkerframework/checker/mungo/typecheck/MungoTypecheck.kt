@@ -9,6 +9,7 @@ import org.checkerframework.checker.mungo.typestate.graph.DecisionState
 import org.checkerframework.checker.mungo.typestate.graph.State
 import org.checkerframework.checker.mungo.utils.ClassUtils
 import org.checkerframework.checker.mungo.utils.MungoUtils
+import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.javacutil.AnnotationUtils
 import org.checkerframework.javacutil.TreeUtils
 import javax.lang.model.element.AnnotationMirror
@@ -238,6 +239,15 @@ object MungoTypecheck {
     }
   }
 
+  fun invalidate(utils: MungoUtils, type: AnnotatedTypeMirror, forceNullable: Boolean = false): MungoType {
+    return when (type) {
+      is AnnotatedTypeMirror.AnnotatedTypeVariable -> invalidate(utils, type.erased, true)
+      is AnnotatedTypeMirror.AnnotatedWildcardType -> invalidate(utils, type.erased, true)
+      is AnnotatedTypeMirror.AnnotatedArrayType -> invalidate(utils, type.erased.underlyingType, true)
+      else -> invalidate(utils, type.underlyingType, forceNullable)
+    }
+  }
+
   // Get the least upper bound of the possible type, assuming anything happened
   fun invalidate(utils: MungoUtils, type: TypeMirror, forceNullable: Boolean = false): MungoType {
     when {
@@ -246,9 +256,9 @@ object MungoTypecheck {
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
       type is Type.TypeVar ->
-        return invalidate(utils, type.upperBound, true)
+        return invalidate(utils, utils.typeUtils.erasure(type.upperBound), true)
       type is Type.WildcardType ->
-        return invalidate(utils, type.extendsBound, true)
+        return invalidate(utils, utils.typeUtils.erasure(type.extendsBound), true)
     }
 
     val isNullable = forceNullable || type.annotationMirrors.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
@@ -270,6 +280,15 @@ object MungoTypecheck {
     return MungoUnionType.create(listOf(mungoType, maybeNullableType))
   }
 
+  fun typeDeclaration(utils: MungoUtils, type: AnnotatedTypeMirror, annotations: Collection<AnnotationMirror> = type.underlyingType.annotationMirrors): MungoType {
+    return when (type) {
+      is AnnotatedTypeMirror.AnnotatedTypeVariable -> invalidate(utils, type.erased, true)
+      is AnnotatedTypeMirror.AnnotatedWildcardType -> invalidate(utils, type.erased, true)
+      is AnnotatedTypeMirror.AnnotatedArrayType -> invalidate(utils, type.erased.underlyingType, true)
+      else -> typeDeclaration(utils, type.underlyingType, annotations)
+    }
+  }
+
   fun typeDeclaration(utils: MungoUtils, type: TypeMirror, annotations: Collection<AnnotationMirror> = type.annotationMirrors): MungoType {
     when {
       type.kind.isPrimitive -> return MungoPrimitiveType.SINGLETON
@@ -277,9 +296,9 @@ object MungoTypecheck {
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
       type is Type.TypeVar ->
-        return invalidate(utils, type.upperBound, true)
+        return invalidate(utils, utils.typeUtils.erasure(type.upperBound), true)
       type is Type.WildcardType ->
-        return invalidate(utils, type.extendsBound, true)
+        return invalidate(utils, utils.typeUtils.erasure(type.extendsBound), true)
     }
 
     val isNullable = annotations.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }
@@ -310,17 +329,26 @@ object MungoTypecheck {
     return MungoUnionType.create(listOf(mungoType, maybeNullableType))
   }
 
+  fun typeLocalDeclaration(utils: MungoUtils, type: AnnotatedTypeMirror): MungoType {
+    return when (type) {
+      is AnnotatedTypeMirror.AnnotatedTypeVariable -> invalidate(utils, type.erased, true)
+      is AnnotatedTypeMirror.AnnotatedWildcardType -> invalidate(utils, type.erased, true)
+      is AnnotatedTypeMirror.AnnotatedArrayType -> invalidate(utils, type.erased.underlyingType, true)
+      else -> typeLocalDeclaration(utils, type.underlyingType)
+    }
+  }
+
   // Like typeDeclaration(), but only cares about @Nullable annotations
-  fun typeLocalDeclaration(utils: MungoUtils, type: TypeMirror, annotations: Collection<AnnotationMirror> = type.annotationMirrors): MungoType {
+  private fun typeLocalDeclaration(utils: MungoUtils, type: TypeMirror, annotations: Collection<AnnotationMirror> = type.annotationMirrors): MungoType {
     when {
       type.kind.isPrimitive -> return MungoPrimitiveType.SINGLETON
       type.kind == TypeKind.VOID -> return MungoPrimitiveType.SINGLETON
       type.kind == TypeKind.NULL -> return MungoNullType.SINGLETON
       type.kind == TypeKind.ARRAY -> return MungoNoProtocolType.SINGLETON
       type is Type.TypeVar ->
-        return invalidate(utils, type.upperBound, true)
+        return invalidate(utils, utils.typeUtils.erasure(type.upperBound), true)
       type is Type.WildcardType ->
-        return invalidate(utils, type.extendsBound, true)
+        return invalidate(utils, utils.typeUtils.erasure(type.extendsBound), true)
     }
 
     val isNullable = annotations.any { MungoUtils.nullableAnnotations.contains(AnnotationUtils.annotationName(it)) }

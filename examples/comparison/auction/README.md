@@ -26,7 +26,9 @@ Auction.java:23: error: [Cannot call bid on ended protocol, on moved value] (Can
 Auction.java:29: error: [Object did not complete its protocol. Type: ClientProtocol{Running}] (Object did not complete its protocol. Type: ClientProtocol{Running})
     for (Client client : clients) {
                 ^
-Auction.java:29: error: [enhancedfor.type.incompatible] (enhancedfor.type.incompatible)
+Auction.java:29: error: [enhancedfor.type.incompatible] incompatible types in enhanced for loop.
     for (Client client : clients) {
                          ^
+  found   : NoProtocol Client
+  required: ClientProtocol{Running} Client
 5 errors```

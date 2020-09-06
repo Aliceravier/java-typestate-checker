@@ -91,7 +91,7 @@ private fun intersect(a: MungoType, b: MungoType): MungoType = when (a) {
 class MungoUnionType private constructor(val types: Set<MungoType>) : MungoType() {
 
   init {
-    if (types.isEmpty()) {
+    if (types.size <= 1) {
       MungoUtils.printStack()
       throw AssertionError("union invariant")
     }
@@ -103,7 +103,7 @@ class MungoUnionType private constructor(val types: Set<MungoType>) : MungoType(
 
   companion object {
     fun create(types: Collection<MungoType>): MungoType {
-      val flatTypes = types.flatMap {
+      var flatTypes = types.flatMap {
         when (it) {
           // Ensure set does not contain UnionType
           is MungoUnionType -> it.types
@@ -112,16 +112,19 @@ class MungoUnionType private constructor(val types: Set<MungoType>) : MungoType(
           else -> listOf(it)
         }
       }.toSet() // Avoid duplicates by making it a set
-      // Ensure set is not empty
-      if (flatTypes.isEmpty()) return MungoBottomType.SINGLETON
-      // Ensure set has size > 1
-      if (flatTypes.size == 1) return flatTypes.first()
-      // Ensure set does not contain UnknownType
-      if (flatTypes.contains(MungoUnknownType.SINGLETON)) return MungoUnknownType.SINGLETON
+
       // Simplify if ObjectType is present
       if (flatTypes.contains(MungoObjectType.SINGLETON)) {
-        return MungoUnionType(flatTypes.filterNot { isObjectType(it) }.toSet())
+        flatTypes = flatTypes.filterNot { isObjectType(it) }.toSet()
       }
+
+      // If set is empty, return Bottom
+      if (flatTypes.isEmpty()) return MungoBottomType.SINGLETON
+      // If set has only one type, return it
+      if (flatTypes.size == 1) return flatTypes.first()
+      // If set has Unknown, return it
+      if (flatTypes.contains(MungoUnknownType.SINGLETON)) return MungoUnknownType.SINGLETON
+      // Create union type
       return MungoUnionType(flatTypes)
     }
   }
@@ -139,7 +142,7 @@ class MungoUnionType private constructor(val types: Set<MungoType>) : MungoType(
 
   override fun format() = formatCache ?: run {
     val states = types.filterIsInstance<MungoStateType>()
-    val notStates = types.filterNot { it is MungoStateType }
+    val notStates = types.filterNot { it is MungoStateType }.sortedBy { it.hashCode() }
 
     val map = mutableMapOf<Graph, MutableList<MungoStateType>>()
     for (state in states) map.computeIfAbsent(state.graph) { mutableListOf() }.add(state)
@@ -175,37 +178,7 @@ sealed class MungoTypeSingletons(private val hashCode: Int) : MungoType() {
   override fun hashCode() = hashCode
 }
 
-class MungoObjectType private constructor() : MungoTypeSingletons(7) {
-
-  companion object {
-    val SINGLETON = MungoObjectType()
-  }
-
-  override fun toString() = "MungoObjectType"
-  override fun format() = "Object"
-}
-
-class MungoEndedType private constructor() : MungoTypeSingletons(6) {
-
-  companion object {
-    val SINGLETON = MungoEndedType()
-  }
-
-  override fun toString() = "MungoEndedType"
-  override fun format() = "Ended"
-}
-
-class MungoNoProtocolType private constructor() : MungoTypeSingletons(5) {
-
-  companion object {
-    val SINGLETON = MungoNoProtocolType()
-  }
-
-  override fun toString() = "MungoNoProtocolType"
-  override fun format() = "NoProtocol"
-}
-
-class MungoMovedType private constructor() : MungoTypeSingletons(4) {
+class MungoMovedType private constructor() : MungoTypeSingletons(7) {
 
   companion object {
     val SINGLETON = MungoMovedType()
@@ -215,7 +188,7 @@ class MungoMovedType private constructor() : MungoTypeSingletons(4) {
   override fun format() = "Moved"
 }
 
-class MungoPrimitiveType private constructor() : MungoTypeSingletons(3) {
+class MungoPrimitiveType private constructor() : MungoTypeSingletons(6) {
 
   companion object {
     val SINGLETON = MungoPrimitiveType()
@@ -225,7 +198,7 @@ class MungoPrimitiveType private constructor() : MungoTypeSingletons(3) {
   override fun format() = "Primitive"
 }
 
-class MungoNullType private constructor() : MungoTypeSingletons(2) {
+class MungoNullType private constructor() : MungoTypeSingletons(5) {
 
   companion object {
     val SINGLETON = MungoNullType()
@@ -233,6 +206,36 @@ class MungoNullType private constructor() : MungoTypeSingletons(2) {
 
   override fun toString() = "MungoNullType"
   override fun format() = "Null"
+}
+
+class MungoEndedType private constructor() : MungoTypeSingletons(4) {
+
+  companion object {
+    val SINGLETON = MungoEndedType()
+  }
+
+  override fun toString() = "MungoEndedType"
+  override fun format() = "Ended"
+}
+
+class MungoNoProtocolType private constructor() : MungoTypeSingletons(3) {
+
+  companion object {
+    val SINGLETON = MungoNoProtocolType()
+  }
+
+  override fun toString() = "MungoNoProtocolType"
+  override fun format() = "NoProtocol"
+}
+
+class MungoObjectType private constructor() : MungoTypeSingletons(2) {
+
+  companion object {
+    val SINGLETON = MungoObjectType()
+  }
+
+  override fun toString() = "MungoObjectType"
+  override fun format() = "Object"
 }
 
 class MungoUnknownType private constructor() : MungoType() {

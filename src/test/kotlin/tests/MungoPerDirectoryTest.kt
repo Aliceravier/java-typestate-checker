@@ -8,7 +8,8 @@ import org.junit.Test
 import java.io.File
 import java.util.*
 
-val ignore = emptyArray<String>()
+val ignore = emptyList<String>()
+val only = emptyList<String>()
 
 abstract class MungoPerDirectoryTest(val originalTestDir: String, testFiles: List<File>, opts: Array<String>) : CheckerFrameworkPerDirectoryTest(
   testFiles,
@@ -18,6 +19,9 @@ abstract class MungoPerDirectoryTest(val originalTestDir: String, testFiles: Lis
 ) {
   @Test
   override fun run() {
+    if (only.isNotEmpty() && !only.contains(originalTestDir)) {
+      return
+    }
     if (ignore.contains(originalTestDir)) {
       return
     }

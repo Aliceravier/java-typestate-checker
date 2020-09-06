@@ -67,12 +67,11 @@ class Analyzer(private val checker: MungoChecker) {
     utils.factory.setAnalyzer(this)
   }
 
-  private fun getInvalidatedType(type: TypeMirror) = MungoTypecheck.invalidate(checker.utils, type)
-  private fun getInvalidatedType(type: AnnotatedTypeMirror) = MungoTypecheck.invalidate(checker.utils, type.underlyingType)
+  private fun getInvalidatedType(type: AnnotatedTypeMirror) = MungoTypecheck.invalidate(checker.utils, type)
 
   private fun getTypeFromTree(tree: Tree) = utils.factory.getAnnotatedType(tree)
 
-  private fun getInitialType(tree: Tree, type: TypeMirror): MungoType {
+  private fun getInitialType(tree: Tree, type: AnnotatedTypeMirror): MungoType {
     val element = TreeUtils.elementFromTree(tree)
     // If it is a local variable...
     if (element?.kind == ElementKind.LOCAL_VARIABLE) {
@@ -81,7 +80,7 @@ class Analyzer(private val checker: MungoChecker) {
       return if (decl == null)
         MungoTypecheck.typeLocalDeclaration(checker.utils, type)
       else
-        MungoTypecheck.typeLocalDeclaration(checker.utils, getTypeFromTree(decl).underlyingType)
+        MungoTypecheck.typeLocalDeclaration(checker.utils, getTypeFromTree(decl))
     }
     // If it is a parameter...
     if (element?.kind == ElementKind.PARAMETER) {
@@ -113,8 +112,9 @@ class Analyzer(private val checker: MungoChecker) {
     return getInvalidatedType(type)
   }
 
-  fun getInitialInfo(tree: Tree, type: AnnotatedTypeMirror = getTypeFromTree(tree)): StoreInfo {
-    return StoreInfo(this, getInitialType(tree, type.underlyingType), type)
+  fun getInitialInfo(tree: Tree): StoreInfo {
+    val type = getTypeFromTree(tree)
+    return StoreInfo(this, getInitialType(tree, type), type)
   }
 
   private fun getInitialInfo(node: Node): StoreInfo {
@@ -136,7 +136,7 @@ class Analyzer(private val checker: MungoChecker) {
 
   fun getInitialInfo(type: AnnotatedTypeMirror, refine: Boolean = false): StoreInfo {
     return StoreInfo(this, if (refine) {
-      MungoTypecheck.typeDeclaration(checker.utils, type.underlyingType)
+      MungoTypecheck.typeDeclaration(checker.utils, type)
     } else {
       getInvalidatedType(type)
     }, type)
@@ -182,10 +182,11 @@ class Analyzer(private val checker: MungoChecker) {
   }
 
   // Used during analysis
-  fun getCurrentInferredInfo(node: Node, default: StoreInfo = unknown): StoreInfo {
-    val value = nodeValues[node]
+  fun getCurrentInferredInfo(node: Node, default: StoreInfo? = null): StoreInfo {
+    val value = nodeValues[node] ?: default ?: getInitialInfo(node)
     dependencies.computeIfAbsent(currentBlock) { mutableSetOf() }.add(Pair.of(node, value))
-    return value ?: default
+    nodeValues[node] = value
+    return value
   }
 
   fun getRegularExitStore(tree: Tree): Store? {

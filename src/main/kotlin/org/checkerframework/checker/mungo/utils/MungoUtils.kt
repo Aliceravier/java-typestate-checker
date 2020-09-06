@@ -24,6 +24,7 @@ import java.nio.file.Paths
 import java.util.*
 import javax.lang.model.element.AnnotationMirror
 import javax.lang.model.element.Element
+import javax.lang.model.type.TypeKind
 import javax.lang.model.type.TypeMirror
 import javax.tools.JavaFileManager
 
@@ -116,6 +117,10 @@ class MungoUtils(val checker: SourceChecker) {
   }
 
   fun mostSpecific(a: TypeMirror, b: TypeMirror): TypeMirror {
+    if (a.kind == TypeKind.EXECUTABLE || b.kind == TypeKind.EXECUTABLE) {
+      // Avoid java.lang.IllegalArgumentException exception
+      return a
+    }
     return when {
       typeUtils.isAssignable(a, b) -> a
       typeUtils.isAssignable(b, a) -> b
@@ -135,7 +140,8 @@ class MungoUtils(val checker: SourceChecker) {
     if (a.tag == TypeTag.UNKNOWN) return b.tag == TypeTag.UNKNOWN
     if (b.tag == TypeTag.UNKNOWN) return a.tag == TypeTag.UNKNOWN
     // isSameType for methods does not take thrown exceptions into account
-    return typeUtils.isSameType(a, b) && isSameTypes(a.thrownTypes, b.thrownTypes)
+    // TODO ignore exceptions while we do not support them in typestates
+    return typeUtils.isSameType(a, b) // && isSameTypes(a.thrownTypes, b.thrownTypes)
   }
 
   fun isSameTypes(aList: List<Type?>, bList: List<Type?>): Boolean {

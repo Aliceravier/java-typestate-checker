@@ -44,8 +44,9 @@ class AnalyzerVisitor(private val checker: MungoChecker, private val analyzer: A
 
     parameters?.forEach {
       val internal = getReference(it)!!
-      val mungoType = MungoTypecheck.typeDeclaration(utils, it.type)
-      store[internal] = StoreInfo(analyzer, mungoType, utils.factory.getAnnotatedType(it.element))
+      val type = utils.factory.getAnnotatedType(it.element)
+      val mungoType = MungoTypecheck.typeDeclaration(utils, type)
+      store[internal] = StoreInfo(analyzer, mungoType, type)
     }
 
     return store.toImmutable()
@@ -101,7 +102,7 @@ class AnalyzerVisitor(private val checker: MungoChecker, private val analyzer: A
   }*/
 
   override fun visitThisLiteral(n: ThisLiteralNode, res: MutableAnalyzerResultWithValue): Void? {
-    getCurrentInfo(res, n, res.value).let { res.value = it }
+    res.value = getCurrentInfo(res, n, res.value)
     return null
   }
 

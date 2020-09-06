@@ -6,7 +6,7 @@ import java.util.function.Supplier;
 
 class WrapperWithoutProtocol1 {
 
-  // :: error: (Object did not complete its protocol. Type: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+  // :: error: (Object did not complete its protocol. Type: JavaIterator{HasNext|Next} | Ended | Null | Moved)
   public @MungoNullable JavaIterator iterator = null;
 
   public WrapperWithoutProtocol1(JavaIterator it) {
@@ -16,19 +16,19 @@ class WrapperWithoutProtocol1 {
   }
 
   public boolean hasNext() {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Null | Moved)
     // :: error: (Cannot call hasNext on null, on ended protocol, on moved value)
     return iterator.hasNext();
   }
 
   public String next() {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Null | Moved)
     // :: error: (Cannot call next on null, on ended protocol, on moved value, on state HasNext (got: HasNext, Next))
     return iterator.next();
   }
 
   private String privateNext() {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Null | Moved)
     // :: error: (Cannot call next on null, on ended protocol, on moved value, on state HasNext (got: HasNext, Next))
     return iterator.next();
   }
@@ -65,7 +65,7 @@ class WrapperWithoutProtocol2 {
   }
 
   private String privateNext() {
-    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Moved | Null)
+    // :: warning: (iterator: JavaIterator{HasNext|Next} | Ended | Null | Moved)
     // :: error: (Cannot call next on null, on ended protocol, on moved value, on state HasNext (got: HasNext, Next))
     return iterator.next();
   }

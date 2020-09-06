@@ -58,11 +58,12 @@ class StoreInfo(val analyzer: Analyzer, val mungoType: MungoType, val type: Anno
   companion object {
     fun merge(a: StoreInfo, b: StoreInfo): StoreInfo {
       val analyzer = a.analyzer
-      // val type = analyzer.utils.leastUpperBound(a.underlyingType, b.underlyingType)
+      // TODO val type = analyzer.utils.leastUpperBound(a.underlyingType, b.underlyingType)
+      val mostSpecific = analyzer.utils.mostSpecific(a.underlyingType, b.underlyingType)
       return StoreInfo(
         analyzer,
         a.mungoType.leastUpperBound(b.mungoType),
-        a.type
+        if (mostSpecific === a.underlyingType) b.type else a.type
         // TODO this breaks the tests: analyzer.utils.createType(type, a.type.isDeclaration)
       )
     }

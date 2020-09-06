@@ -5,7 +5,7 @@ public class LinkedList {
 
   private static class Node {
 
-    // :: error: (Object did not complete its protocol. Type: Item{State0|State1} | Ended | Moved | Null)
+    // :: error: (Object did not complete its protocol. Type: Item{State0|State1} | Ended | Null | Moved)
     public @MungoNullable Item value = null;
     public @MungoNullable Node next;
 
@@ -28,9 +28,9 @@ public class LinkedList {
   public void add(Item value) {
     // :: warning: (value: Item{State0|State1})
     Node n = new Node(value);
-    // :: warning: (tail: Null | NoProtocol)
+    // :: warning: (tail: NoProtocol | Null)
     if (tail == null) {
-      // :: warning: (head: Null | NoProtocol)
+      // :: warning: (head: NoProtocol | Null)
       head = n;
       // :: warning: (tail: Null)
       tail = n;
@@ -48,7 +48,7 @@ public class LinkedList {
     }
     // type of expression: Item{State0|State1} | Null | Ended | Moved
     // method return type: Item{State0|State1} | Null
-    // :: warning: (node: Null | NoProtocol)
+    // :: warning: (node: NoProtocol | Null)
     // :: error: (return.type.incompatible)
     return node == null ? null : node.value;
   }

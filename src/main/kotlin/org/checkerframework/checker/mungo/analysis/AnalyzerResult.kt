@@ -11,7 +11,7 @@ class AnalyzerResult(_thenStore: Store, _elseStore: Store) {
   fun isRegular() = thenStore === elseStore
 
   fun getExceptionalStore(cause: Any): Store? {
-    return Store.empty // TODO
+    return null // TODO
   }
 
   override fun toString(): String {
@@ -48,7 +48,7 @@ open class MutableAnalyzerResult(var thenStore: MutableStore, var elseStore: Mut
   }
 
   fun getExceptionalStore(cause: Any): Store? {
-    return Store.empty // TODO
+    return null // TODO
   }
 
   override fun toString(): String {
