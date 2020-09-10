@@ -13,6 +13,7 @@ import org.checkerframework.checker.mungo.typestate.graph.AbstractState
 import org.checkerframework.checker.mungo.typestate.graph.DecisionState
 import org.checkerframework.checker.mungo.typestate.graph.Graph
 import org.checkerframework.checker.mungo.typestate.graph.State
+import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.dataflow.analysis.Store.FlowRule
 import org.checkerframework.dataflow.cfg.ControlFlowGraph
 import org.checkerframework.dataflow.cfg.UnderlyingAST
@@ -53,16 +54,16 @@ class Analyzer(private val checker: MungoChecker) {
   private val visitor = AnalyzerVisitor(checker, this)
 
   private lateinit var root: JCTree.JCCompilationUnit
-  private lateinit var typeIntroducer: MungoTypeIntroducer
+  private lateinit var typeIntroducer: TypeIntroducer
 
   fun setRoot(root: CompilationUnitTree) {
     this.root = root as JCTree.JCCompilationUnit
-    this.typeIntroducer = MungoTypeIntroducer(utils)
+    this.typeIntroducer = TypeIntroducer(utils)
 
     visitor.setRoot(root)
 
     if (!this::unknown.isInitialized) {
-      unknown = StoreInfo(this, MungoUnknownType.SINGLETON, AnnotatedTypeMirror.createType(Type.noType, utils.factory, false))
+      unknown = StoreInfo(this, MungoUnknownType.SINGLETON, utils.factory.createType(Type.noType, false))
     }
 
     utils.factory.setAnalyzer(this)
@@ -72,16 +73,10 @@ class Analyzer(private val checker: MungoChecker) {
     if (tree is TypeCastTree) {
       return typeIntroducer.apply(type, typeIntroducer.declarationOpts)
     }
-
     val element = TreeUtils.elementFromTree(tree)
     // If it is a local variable...
     if (element?.kind == ElementKind.LOCAL_VARIABLE) {
-      // Annotations do not seem to be attached to the TypeMirror... so get them from the declaration...
-      val decl = TreeInfo.declarationFor(element as Symbol.VarSymbol, root) as? VariableTree?
-      return if (decl == null)
-        typeIntroducer.apply(type, typeIntroducer.localDeclarationOpts)
-      else
-        typeIntroducer.apply(utils.factory.getAnnotatedType(decl), typeIntroducer.localDeclarationOpts)
+      return typeIntroducer.apply(type, typeIntroducer.localDeclarationOpts)
     }
     // If it is a parameter...
     if (element?.kind == ElementKind.PARAMETER) {
@@ -92,14 +87,9 @@ class Analyzer(private val checker: MungoChecker) {
       }
       return typeIntroducer.apply(type, typeIntroducer.declarationOpts)
     }
-    // If the return type has annotations or we are sure we have access to the method's code...
+    // If the return type has annotations or we are sure we have access to the method's code, refine
     if (element is ExecutableElement) {
-      val annotated = utils.getTypeFromStub(element)
-      if (annotated is AnnotatedTypeMirror.AnnotatedExecutableType) {
-        typeIntroducer.apply(annotated, typeIntroducer.invalidated)
-        return typeIntroducer.apply(annotated.returnType, typeIntroducer.declarationOpts)
-      }
-      if (!ElementUtils.isElementFromByteCode(element)) {
+      if (type.annotations.any { MungoUtils.isMungoLibAnnotation(it) } || !ElementUtils.isElementFromByteCode(element)) {
         return typeIntroducer.apply(type, typeIntroducer.declarationOpts)
       }
     }
@@ -111,9 +101,9 @@ class Analyzer(private val checker: MungoChecker) {
     return StoreInfo(this, getInitialType(tree, type), type)
   }
 
-  private fun getInitialInfo(node: Node): StoreInfo {
+  fun getInitialInfo(node: Node): StoreInfo {
     if (node is ImplicitThisLiteralNode) {
-      val annotatedType = AnnotatedTypeMirror.createType(node.type, utils.factory, false)
+      val annotatedType = utils.factory.createType(node.type, false)
       return StoreInfo(
         this,
         typeIntroducer.apply(annotatedType, typeIntroducer.invalidated),
@@ -130,16 +120,16 @@ class Analyzer(private val checker: MungoChecker) {
   }
 
   fun getInvalidated(type: TypeMirror): MungoType {
-    val annotatedType = AnnotatedTypeMirror.createType(type, utils.factory, false)
+    val annotatedType = utils.factory.createType(type, false)
     annotatedType.addAnnotations(type.annotationMirrors)
-    return typeIntroducer.getOnce(annotatedType, typeIntroducer.invalidated)
+    return typeIntroducer.get(annotatedType, typeIntroducer.invalidated)
   }
 
   fun getInitialInfo(type: AnnotatedTypeMirror, declaration: Boolean = false): StoreInfo {
     return StoreInfo(this, if (declaration) {
-      typeIntroducer.getOnce(type, typeIntroducer.declarationOpts)
+      typeIntroducer.get(type, typeIntroducer.declarationOpts)
     } else {
-      typeIntroducer.getOnce(type, typeIntroducer.invalidated)
+      typeIntroducer.get(type, typeIntroducer.invalidated)
     }, type)
   }
 
@@ -287,7 +277,7 @@ class Analyzer(private val checker: MungoChecker) {
       } else {
         val store = currentStore.toMutable()
         val internal = createFieldAccess(field, classTree)
-        store[internal] = StoreInfo(this, MungoNullType.SINGLETON, utils.factory.getAnnotatedNullType(emptySet()))
+        store[internal] = StoreInfo(this, MungoNullType.SINGLETON, utils.factory.createNullType())
         currentStore = store.toImmutable()
       }
     }

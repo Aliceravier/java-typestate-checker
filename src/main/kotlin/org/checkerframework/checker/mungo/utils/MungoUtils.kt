@@ -12,7 +12,7 @@ import com.sun.tools.javac.file.JavacFileManager
 import com.sun.tools.javac.processing.JavacProcessingEnvironment
 import com.sun.tools.javac.util.JCDiagnostic
 import com.sun.tools.javac.util.Log
-import org.checkerframework.checker.mungo.analysis.FakeAnnotatedTypeFactory
+import org.checkerframework.checker.mungo.analysis.TypeFactory
 import org.checkerframework.checker.mungo.lib.*
 import org.checkerframework.checker.mungo.typestate.TypestateProcessor
 import org.checkerframework.checker.mungo.typestate.graph.Graph
@@ -46,10 +46,10 @@ class MungoUtils(val checker: SourceChecker) {
   val processor = TypestateProcessor(this)
   val methodUtils = MethodUtils(this)
 
-  lateinit var factory: FakeAnnotatedTypeFactory
+  lateinit var factory: TypeFactory
 
   fun initFactory() {
-    factory = FakeAnnotatedTypeFactory(checker)
+    factory = TypeFactory(checker)
   }
 
   fun getTypeFromStub(elt: Element) = factory.getTypeFromStub(elt)
@@ -106,8 +106,6 @@ class MungoUtils(val checker: SourceChecker) {
       } else null
     }
   }
-
-  fun createType(type: TypeMirror, isDeclaration: Boolean = false) = AnnotatedTypeMirror.createType(type, factory, isDeclaration)
 
   fun leastUpperBound(a: TypeMirror, b: TypeMirror): TypeMirror {
     // Avoid assertion error in com.sun.tools.javac.code.Types$SameTypeVisitor.visitType(Types.java:1064)

@@ -43,9 +43,7 @@ class AnalyzerVisitor(private val checker: MungoChecker, private val analyzer: A
     val store = capturedStore.toMutable()
 
     parameters?.forEach {
-      val internal = getReference(it)!!
-      val type = utils.factory.getAnnotatedType(it.element)
-      store[internal] = analyzer.getInitialInfo(type, true)
+      store[getReference(it)!!] = analyzer.getInitialInfo(it)
     }
 
     return store.toImmutable()

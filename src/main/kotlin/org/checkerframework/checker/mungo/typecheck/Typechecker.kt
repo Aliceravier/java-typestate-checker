@@ -7,6 +7,7 @@ import org.checkerframework.checker.mungo.utils.isSelfAccess
 import org.checkerframework.checker.mungo.utils.lowerBound
 import org.checkerframework.checker.mungo.utils.upperBound
 import org.checkerframework.checker.mungo.utils.MungoUtils
+import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.framework.util.AnnotatedTypes
 import org.checkerframework.javacutil.AnnotationUtils
 import org.checkerframework.javacutil.ElementUtils
@@ -102,7 +103,7 @@ class Typechecker(checker: MungoChecker) : TypecheckerHelpers(checker) {
     // Performs a subtype check, to test whether the node expression iterable type is a subtype of the variable type in the enhanced for loop
     val variable = utils.factory.getAnnotatedType(node.variable)
     val iterableType = utils.factory.getAnnotatedType(node.expression)
-    val iteratedType = AnnotatedTypes.getIteratedType(checker.processingEnvironment, utils.factory, iterableType)
+    val iteratedType = utils.factory.getIteratedType(iterableType)
     commonAssignmentCheck(
       variable,
       node.variable,
@@ -161,7 +162,7 @@ class Typechecker(checker: MungoChecker) : TypecheckerHelpers(checker) {
     val invokedMethod = mType.executableType
     // val typeargs = mType.typeArgs
 
-    val expectedParams = AnnotatedTypes.expandVarArgs(utils.factory, invokedMethod, node.arguments)
+    val expectedParams = utils.factory.expandVarArgs(invokedMethod, node)
 
     for (i in expectedParams.indices) {
       commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")
@@ -192,7 +193,7 @@ class Typechecker(checker: MungoChecker) : TypecheckerHelpers(checker) {
     val invokedMethod = mType.executableType
     // val typeargs = mType.typeArgs
 
-    val expectedParams = AnnotatedTypes.expandVarArgs(utils.factory, invokedMethod, node.arguments)
+    val expectedParams = utils.factory.expandVarArgs(invokedMethod, node)
 
     for (i in expectedParams.indices) {
       commonAssignmentCheckParameter(expectedParams[i], node.arguments[i], "argument.type.incompatible")
@@ -299,7 +300,7 @@ class Typechecker(checker: MungoChecker) : TypecheckerHelpers(checker) {
   }
 
   override fun visitNewArray(node: NewArrayTree, p: Void?): Void? {
-    val arrayType = utils.factory.getAnnotatedType(node)
+    val arrayType = utils.factory.getAnnotatedType(node) as AnnotatedTypeMirror.AnnotatedArrayType
     if (node.initializers != null) {
       for (init in node.initializers) {
         commonAssignmentCheckParameter(arrayType.componentType, init, "array.initializer.type.incompatible")

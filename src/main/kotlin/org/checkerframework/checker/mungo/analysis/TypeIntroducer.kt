@@ -72,7 +72,7 @@ private fun typeMirrorToMungoType(utils: MungoUtils, annotatedType: AnnotatedTyp
   }
 }
 
-class MungoTypeIntroducer(private val utils: MungoUtils) {
+class TypeIntroducer(private val utils: MungoUtils) {
 
   private val cache = WeakIdentityHashMap<AnnotatedTypeMirror, MungoType>()
 
@@ -81,10 +81,10 @@ class MungoTypeIntroducer(private val utils: MungoUtils) {
   val declarationOpts = TypeIntroOpts(invalidated = false, forceNullable = false, typeDeclaration = true, localTypeDeclaration = false)
   val localDeclarationOpts = TypeIntroOpts(invalidated = false, forceNullable = false, typeDeclaration = false, localTypeDeclaration = true)
 
-  fun getOnce(type: AnnotatedTypeMirror, opts: TypeIntroOpts): MungoType {
+  fun get(type: AnnotatedTypeMirror, opts: TypeIntroOpts): MungoType {
     return when (type) {
-      is AnnotatedWildcardType -> getOnce(type.extendsBound, invalidatedWithNull)
-      is AnnotatedTypeVariable -> getOnce(type.upperBound, invalidatedWithNull)
+      is AnnotatedWildcardType -> get(type.extendsBound, invalidatedWithNull)
+      is AnnotatedTypeVariable -> get(type.upperBound, invalidatedWithNull)
       is AnnotatedArrayType -> MungoNoProtocolType.SINGLETON
       is AnnotatedDeclaredType -> typeMirrorToMungoType(utils, type, opts)
       is AnnotatedExecutableType -> MungoUnknownType.SINGLETON
@@ -118,11 +118,8 @@ class MungoTypeIntroducer(private val utils: MungoUtils) {
         typeMirrorToMungoType(utils, type, opts)
       }
       is AnnotatedExecutableType -> {
-        if (type.returnType.annotations.any { MungoUtils.isMungoLibAnnotation(it) }) {
-          // If the return type has annotations, refine
-          apply(type.returnType, declarationOpts)
-        } else if (!ElementUtils.isElementFromByteCode(type.element)) {
-          // If we are sure we have access to the method's code, refine
+        // If the return type has annotations or we are sure we have access to the method's code, refine
+        if (type.returnType.annotations.any { MungoUtils.isMungoLibAnnotation(it) } || !ElementUtils.isElementFromByteCode(type.element)) {
           apply(type.returnType, declarationOpts)
         } else {
           apply(type.returnType, invalidatedWithNull)
