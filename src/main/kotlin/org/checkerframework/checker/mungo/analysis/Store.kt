@@ -192,29 +192,29 @@ class MutableStore(private val map: MutableMap<Reference, StoreInfo> = mutableMa
     return this
   }
 
-  fun invalidate(utils: MungoUtils): MutableStore {
+  fun invalidate(analyzer: Analyzer): MutableStore {
     canMutate()
     for ((key, value) in map) {
-      map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, key.type))
+      map[key] = StoreInfo(value, analyzer.getInvalidated(key.type))
     }
     return this
   }
 
-  fun invalidateFields(utils: MungoUtils): MutableStore {
+  fun invalidateFields(analyzer: Analyzer): MutableStore {
     canMutate()
     for ((key, value) in map) {
       if (key.isThisField()) {
-        map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, key.type))
+        map[key] = StoreInfo(value, analyzer.getInvalidated(key.type))
       }
     }
     return this
   }
 
-  fun invalidatePublicFields(utils: MungoUtils): MutableStore {
+  fun invalidatePublicFields(analyzer: Analyzer): MutableStore {
     canMutate()
     for ((key, value) in map) {
       if (key.isThisField() && key is FieldAccess && key.isNonPrivate) {
-        map[key] = StoreInfo(value, MungoTypecheck.invalidate(utils, key.type))
+        map[key] = StoreInfo(value, analyzer.getInvalidated(key.type))
       }
     }
     return this

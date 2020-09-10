@@ -45,8 +45,7 @@ class AnalyzerVisitor(private val checker: MungoChecker, private val analyzer: A
     parameters?.forEach {
       val internal = getReference(it)!!
       val type = utils.factory.getAnnotatedType(it.element)
-      val mungoType = MungoTypecheck.typeDeclaration(utils, type)
-      store[internal] = StoreInfo(analyzer, mungoType, type)
+      store[internal] = analyzer.getInitialInfo(type, true)
     }
 
     return store.toImmutable()
@@ -279,10 +278,8 @@ class AnalyzerVisitor(private val checker: MungoChecker, private val analyzer: A
     // Invalidate
     // TODO improve?
     if (!isSideEffectFree(method)) {
-      // result.thenStore.invalidate(utils)
-      // result.elseStore.invalidate(utils)
-      result.thenStore.invalidateFields(utils)
-      result.elseStore.invalidateFields(utils)
+      result.thenStore.invalidateFields(analyzer)
+      result.elseStore.invalidateFields(analyzer)
     }
 
     // Apply type refinements
@@ -409,7 +406,6 @@ class AnalyzerVisitor(private val checker: MungoChecker, private val analyzer: A
   }
 
   override fun visitTypeCast(n: TypeCastNode, result: MutableAnalyzerResultWithValue): Void? {
-    result.value = StoreInfo(result.value, MungoTypecheck.typeDeclaration(utils, n.type))
     return null
   }
 

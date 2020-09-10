@@ -8,13 +8,11 @@ import com.sun.tools.javac.tree.TreeInfo
 import org.checkerframework.checker.mungo.MungoChecker
 import org.checkerframework.checker.mungo.typecheck.MungoNullType
 import org.checkerframework.checker.mungo.typecheck.MungoType
-import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
 import org.checkerframework.checker.mungo.typecheck.MungoUnknownType
 import org.checkerframework.checker.mungo.typestate.graph.AbstractState
 import org.checkerframework.checker.mungo.typestate.graph.DecisionState
 import org.checkerframework.checker.mungo.typestate.graph.Graph
 import org.checkerframework.checker.mungo.typestate.graph.State
-import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.dataflow.analysis.Store.FlowRule
 import org.checkerframework.dataflow.cfg.ControlFlowGraph
 import org.checkerframework.dataflow.cfg.UnderlyingAST
@@ -55,9 +53,12 @@ class Analyzer(private val checker: MungoChecker) {
   private val visitor = AnalyzerVisitor(checker, this)
 
   private lateinit var root: JCTree.JCCompilationUnit
+  private lateinit var typeIntroducer: MungoTypeIntroducer
 
   fun setRoot(root: CompilationUnitTree) {
     this.root = root as JCTree.JCCompilationUnit
+    this.typeIntroducer = MungoTypeIntroducer(utils)
+
     visitor.setRoot(root)
 
     if (!this::unknown.isInitialized) {
@@ -67,78 +68,78 @@ class Analyzer(private val checker: MungoChecker) {
     utils.factory.setAnalyzer(this)
   }
 
-  private fun getInvalidatedType(type: AnnotatedTypeMirror) = MungoTypecheck.invalidate(checker.utils, type)
-
-  private fun getTypeFromTree(tree: Tree) = utils.factory.getAnnotatedType(tree)
-
   private fun getInitialType(tree: Tree, type: AnnotatedTypeMirror): MungoType {
+    if (tree is TypeCastTree) {
+      return typeIntroducer.apply(type, typeIntroducer.declarationOpts)
+    }
+
     val element = TreeUtils.elementFromTree(tree)
     // If it is a local variable...
     if (element?.kind == ElementKind.LOCAL_VARIABLE) {
       // Annotations do not seem to be attached to the TypeMirror... so get them from the declaration...
       val decl = TreeInfo.declarationFor(element as Symbol.VarSymbol, root) as? VariableTree?
       return if (decl == null)
-        MungoTypecheck.typeLocalDeclaration(checker.utils, type)
+        typeIntroducer.apply(type, typeIntroducer.localDeclarationOpts)
       else
-        MungoTypecheck.typeLocalDeclaration(checker.utils, getTypeFromTree(decl))
+        typeIntroducer.apply(utils.factory.getAnnotatedType(decl), typeIntroducer.localDeclarationOpts)
     }
     // If it is a parameter...
     if (element?.kind == ElementKind.PARAMETER) {
       if (tree !is VariableTree) {
         // The tree refers to a parameter, but from inside the function.
         // Treat it like a local variable.
-        return MungoTypecheck.typeLocalDeclaration(checker.utils, type)
+        return typeIntroducer.apply(type, typeIntroducer.localDeclarationOpts)
       }
-      val annotated = utils.getTypeFromStub(element)
-      if (annotated is AnnotatedTypeMirror.AnnotatedDeclaredType) {
-        if (annotated.annotations.any { MungoUtils.isMungoLibAnnotation(it) }) {
-          return MungoTypecheck.typeDeclaration(checker.utils, type, annotated.annotations)
-        }
-      }
-      return MungoTypecheck.typeDeclaration(checker.utils, type)
+      return typeIntroducer.apply(type, typeIntroducer.declarationOpts)
     }
     // If the return type has annotations or we are sure we have access to the method's code...
     if (element is ExecutableElement) {
       val annotated = utils.getTypeFromStub(element)
       if (annotated is AnnotatedTypeMirror.AnnotatedExecutableType) {
-        if (annotated.returnType.annotations.any { MungoUtils.isMungoLibAnnotation(it) }) {
-          return MungoTypecheck.typeDeclaration(checker.utils, type, annotated.returnType.annotations)
-        }
+        typeIntroducer.apply(annotated, typeIntroducer.invalidated)
+        return typeIntroducer.apply(annotated.returnType, typeIntroducer.declarationOpts)
       }
       if (!ElementUtils.isElementFromByteCode(element)) {
-        return MungoTypecheck.typeDeclaration(checker.utils, type)
+        return typeIntroducer.apply(type, typeIntroducer.declarationOpts)
       }
     }
-    return getInvalidatedType(type)
+    return typeIntroducer.apply(type, typeIntroducer.invalidated)
   }
 
   fun getInitialInfo(tree: Tree): StoreInfo {
-    val type = getTypeFromTree(tree)
+    val type = utils.factory.getAnnotatedType(tree)
     return StoreInfo(this, getInitialType(tree, type), type)
   }
 
   private fun getInitialInfo(node: Node): StoreInfo {
+    if (node is ImplicitThisLiteralNode) {
+      val annotatedType = AnnotatedTypeMirror.createType(node.type, utils.factory, false)
+      return StoreInfo(
+        this,
+        typeIntroducer.apply(annotatedType, typeIntroducer.invalidated),
+        annotatedType
+      )
+    }
+
     val tree = node.tree
     if (tree != null && TreeUtils.canHaveTypeAnnotation(tree)) {
       return getInitialInfo(tree)
     }
 
-    if (node is ImplicitThisLiteralNode) {
-      return StoreInfo(
-        this,
-        MungoTypecheck.invalidate(checker.utils, node.type),
-        AnnotatedTypeMirror.createType(node.type, utils.factory, false)
-      )
-    }
-
     return unknown
   }
 
-  fun getInitialInfo(type: AnnotatedTypeMirror, refine: Boolean = false): StoreInfo {
-    return StoreInfo(this, if (refine) {
-      MungoTypecheck.typeDeclaration(checker.utils, type)
+  fun getInvalidated(type: TypeMirror): MungoType {
+    val annotatedType = AnnotatedTypeMirror.createType(type, utils.factory, false)
+    annotatedType.addAnnotations(type.annotationMirrors)
+    return typeIntroducer.getOnce(annotatedType, typeIntroducer.invalidated)
+  }
+
+  fun getInitialInfo(type: AnnotatedTypeMirror, declaration: Boolean = false): StoreInfo {
+    return StoreInfo(this, if (declaration) {
+      typeIntroducer.getOnce(type, typeIntroducer.declarationOpts)
     } else {
-      getInvalidatedType(type)
+      typeIntroducer.getOnce(type, typeIntroducer.invalidated)
     }, type)
   }
 
@@ -254,7 +255,7 @@ class Analyzer(private val checker: MungoChecker) {
       if (scanning.containsKey(ct)) continue
       scanning[ct] = 1
 
-      val graph = checker.utils.classUtils.visitClassSymbol((ct as JCTree.JCClassDecl).sym)
+      val graph = utils.classUtils.visitClassSymbol((ct as JCTree.JCClassDecl).sym)
       val info = prepareClass(ct)
       run(classQueue, ct, info.static, null)
       run(classQueue, ct, info.nonStatic, graph)
@@ -326,7 +327,7 @@ class Analyzer(private val checker: MungoChecker) {
     // The initial information for non public methods, is the worst case scenario: all the fields invalidated.
     // TODO improve this by using the upper bound of the stores of all public methods, instead of invalidating everything
     // TODO or performing more complex analysis
-    val storeForNonPublicMethods = exitConstructorsStore.toMutable().invalidateFields(checker.utils).toImmutable()
+    val storeForNonPublicMethods = exitConstructorsStore.toMutable().invalidateFields(this).toImmutable()
 
     // Analyze non public methods
     for (method in info.nonPublicMethods) {
@@ -680,7 +681,7 @@ class Analyzer(private val checker: MungoChecker) {
 
     fun getMethodToState(state: State) = run {
       methodsWithTypes.mapNotNull { (method, symbol) ->
-        val t = state.transitions.entries.find { checker.utils.methodUtils.sameMethod(env, symbol, it.key) }
+        val t = state.transitions.entries.find { utils.methodUtils.sameMethod(env, symbol, it.key) }
         t?.value?.let { Pair(method, it) }
       }.toMap()
     }
@@ -699,7 +700,7 @@ class Analyzer(private val checker: MungoChecker) {
     fun mergeStateStore(state: State, store: Store) {
       val currStore = stateToStore[state] ?: emptyStore
       // Invalidate public fields since anything might have happened to them
-      val newStore = Store.mutableMergeFields(currStore, store).invalidatePublicFields(checker.utils).toImmutable()
+      val newStore = Store.mutableMergeFields(currStore, store).invalidatePublicFields(this).toImmutable()
       if (!stateToStore.containsKey(state) || currStore != newStore) {
         stateToStore[state] = newStore
         stateQueue.add(state)
@@ -760,14 +761,14 @@ class Analyzer(private val checker: MungoChecker) {
   ) {
     // Since this class has no protocol, all methods are available.
     // It is as if it had only one state, and methods lead always to that state.
-    var globalStore = initialStore.toMutable().invalidatePublicFields(checker.utils).toImmutable()
+    var globalStore = initialStore.toMutable().invalidatePublicFields(this).toImmutable()
     var reanalyze = true
 
     // Update the global store. Analyze again if changed.
     fun updateGlobalStore(store: Store) {
       val currStore = globalStore
       // Invalidate public fields since anything might have happened to them
-      val newStore = Store.mutableMergeFields(currStore, store).invalidatePublicFields(checker.utils).toImmutable()
+      val newStore = Store.mutableMergeFields(currStore, store).invalidatePublicFields(this).toImmutable()
       if (currStore != newStore) {
         globalStore = newStore
         reanalyze = true
