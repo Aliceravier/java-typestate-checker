@@ -79,7 +79,7 @@ fun getReference(tree: Tree): Reference? {
       when (ele.kind) {
         LOCAL_VARIABLE, RESOURCE_VARIABLE, EXCEPTION_PARAMETER, PARAMETER -> LocalVariable(ele)
         FIELD -> {
-          val enclosingType = ElementUtils.enclosingClass(ele).asType()
+          val enclosingType = ElementUtils.enclosingClass(ele)!!.asType()
           val fieldAccessExpression = if (ElementUtils.isStatic(ele)) {
             ClassName(enclosingType)
           } else {

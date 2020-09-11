@@ -4,7 +4,6 @@ import com.sun.source.tree.*
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Type
 import com.sun.tools.javac.tree.JCTree
-import com.sun.tools.javac.tree.TreeInfo
 import org.checkerframework.checker.mungo.MungoChecker
 import org.checkerframework.checker.mungo.typecheck.MungoNullType
 import org.checkerframework.checker.mungo.typecheck.MungoType
@@ -341,10 +340,11 @@ class Analyzer(private val checker: MungoChecker) {
     // Analyze lambdas
     while (!lambdaQueue.isEmpty()) {
       val lambdaPair = lambdaQueue.poll()
+      val mt = TreeUtils.enclosingOfKind(utils.getPath(lambdaPair.first, root), Tree.Kind.METHOD) as MethodTree
       run(
         classQueue,
         lambdaQueue,
-        CFGLambda(lambdaPair.first),
+        CFGLambda(lambdaPair.first, classTree, mt),
         lambdaPair.second
       )
     }
@@ -435,7 +435,7 @@ class Analyzer(private val checker: MungoChecker) {
       is RegularBlock -> {
         val succ = block.successor!!
         var result = inputBefore
-        for (n in block.contents) {
+        for (n in block.nodes) {
           result = callInferrer(n, result)
         }
         propagateStoresTo(succ, result, block.flowRule)
@@ -525,7 +525,7 @@ class Analyzer(private val checker: MungoChecker) {
     val block = node.block
     if (block is RegularBlock) {
       if (block.successor is ConditionalBlock) {
-        return block.contents.last() === node
+        return block.lastNode === node
       }
     }
     return false
@@ -534,10 +534,10 @@ class Analyzer(private val checker: MungoChecker) {
   private fun shouldEachToEach(node: Node): Boolean {
     return when (val block = node.block) {
       is RegularBlock -> {
-        val idx = block.contents.indexOf(node)
+        val idx = block.nodes.indexOf(node)
         val nextIdx = idx + 1
-        if (nextIdx < block.contents.size) {
-          return shouldEachToEach(node, block.contents[nextIdx])
+        if (nextIdx < block.nodes.size) {
+          return shouldEachToEach(node, block.nodes[nextIdx])
         }
         return shouldEachToEach(node, block.successor)
       }
@@ -550,7 +550,7 @@ class Analyzer(private val checker: MungoChecker) {
     return when (succ) {
       is ConditionalBlock -> true
       is SpecialBlock -> succ.specialType == SpecialBlock.SpecialBlockType.EXIT
-      is RegularBlock -> shouldEachToEach(node, succ.contents.firstOrNull())
+      is RegularBlock -> shouldEachToEach(node, succ.nodes.firstOrNull())
       else -> false
     }
   }

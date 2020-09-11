@@ -53,48 +53,6 @@ class FileInCollection {
           break;
         case OPEN:
         case READ:
-          // :: warning: (f: FileInCollection{Read|Open})
-          while (f.hasNext()) {
-            // :: warning: (f: FileInCollection{Read})
-            f.read();
-          }
-          // :: warning: (f: FileInCollection{Close})
-          f.close();
-          break;
-        case CLOSE:
-          // :: warning: (f: FileInCollection{Close})
-          f.close();
-          break;
-      }
-    }
-  }
-
-  public static void main2(String[] args) {
-    FileInCollection[] list = new FileInCollection[] { new FileInCollection() };
-
-    // :: error: (enhancedfor.type.incompatible)
-    for (FileInCollection f : list) {
-      // :: warning: (f: FileInCollection{Init|Open|Read|Close} | Ended | Moved)
-      // :: error: (Cannot call state on ended protocol, on moved value)
-      switch (f.state()) {
-        case INIT:
-          // :: warning: (f: FileInCollection{Init})
-          switch (f.open()) {
-            case OK:
-              // :: warning: (f: FileInCollection{Open})
-              while (f.hasNext()) {
-                // :: warning: (f: FileInCollection{Read})
-                f.read();
-              }
-              // :: warning: (f: FileInCollection{Close})
-              f.close();
-              break;
-            case ERROR:
-              break;
-          }
-          break;
-        case OPEN:
-        case READ:
           // :: warning: (f: FileInCollection{Open|Read})
           while (f.hasNext()) {
             // :: warning: (f: FileInCollection{Read})
@@ -110,5 +68,48 @@ class FileInCollection {
       }
     }
   }
+
+  // TODO
+  /*public static void main2(String[] args) {
+    FileInCollection[] list = new FileInCollection[] { new FileInCollection() };
+
+    :: error: (enhancedfor.type.incompatible)
+    for (FileInCollection f : list) {
+      :: warning: (f: FileInCollection{Init|Open|Read|Close} | Ended | Moved)
+      :: error: (Cannot call state on ended protocol, on moved value)
+      switch (f.state()) {
+        case INIT:
+          :: warning: (f: FileInCollection{Init})
+          switch (f.open()) {
+            case OK:
+              :: warning: (f: FileInCollection{Open})
+              while (f.hasNext()) {
+                :: warning: (f: FileInCollection{Read})
+                f.read();
+              }
+              :: warning: (f: FileInCollection{Close})
+              f.close();
+              break;
+            case ERROR:
+              break;
+          }
+          break;
+        case OPEN:
+        case READ:
+          :: warning: (f: FileInCollection{Open|Read})
+          while (f.hasNext()) {
+            :: warning: (f: FileInCollection{Read})
+            f.read();
+          }
+          :: warning: (f: FileInCollection{Close})
+          f.close();
+          break;
+        case CLOSE:
+          :: warning: (f: FileInCollection{Close})
+          f.close();
+          break;
+      }
+    }
+  }*/
 
 }

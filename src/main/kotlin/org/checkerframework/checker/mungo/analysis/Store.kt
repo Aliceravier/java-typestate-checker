@@ -2,11 +2,8 @@ package org.checkerframework.checker.mungo.analysis
 
 import org.checkerframework.checker.mungo.typecheck.MungoBottomType
 import org.checkerframework.checker.mungo.typecheck.MungoType
-import org.checkerframework.checker.mungo.typecheck.MungoTypecheck
-import org.checkerframework.checker.mungo.utils.MungoUtils
 import org.checkerframework.framework.type.AnnotatedTypeMirror
 import org.checkerframework.framework.type.visitor.EquivalentAtmComboScanner
-import org.checkerframework.javacutil.PluginUtil
 import javax.lang.model.type.TypeMirror
 
 private class AnnotatedTypeMirrorComparer : EquivalentAtmComboScanner<Boolean, Analyzer>() {
@@ -27,7 +24,7 @@ private class AnnotatedTypeMirrorComparer : EquivalentAtmComboScanner<Boolean, A
   }
 
   override fun defaultErrorMessage(type1: AnnotatedTypeMirror, type2: AnnotatedTypeMirror, analyzer: Analyzer): String {
-    throw UnsupportedOperationException(PluginUtil.joinLines("Comparing two different subclasses of AnnotatedTypeMirror.", "type1=$type1", "type2=$type2"))
+    throw UnsupportedOperationException(listOf("Comparing two different subclasses of AnnotatedTypeMirror.", "type1=$type1", "type2=$type2").joinToString("\n"))
   }
 }
 
